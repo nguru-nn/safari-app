@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { IconChevronDown, IconPlus, IconTrash } from '@tabler/icons-react'
+import { IconChevronDown, IconPlus, IconTrash, IconDeviceFloppy, IconCheck } from '@tabler/icons-react'
 import RichTextBox from './RichTextBox'
 import HotelPickerModal from './HotelPickerModal'
 import {
@@ -12,16 +12,22 @@ import {
 } from '../lib/itineraries'
 
 const ACTIVITIES = [
+  { value: 'airport_transfer', label: 'Airport transfer' },
+  { value: 'game_drive', label: 'Game drive' },
   { value: 'hot_air_balloon', label: 'Hot air balloon' },
   { value: 'cultural_visit', label: 'Cultural visit (Maasai village)' },
   { value: 'bushwalk', label: 'Bushwalk' },
   { value: 'night_game_drive', label: 'Night game drive' },
+  { value: 'sundowner', label: 'Sundowner' },
   { value: 'cycling', label: 'Cycling' },
   { value: 'boat_tour', label: 'Boat tour' },
+  { value: 'rest_day', label: 'Rest day' },
 ]
 
-export default function DayAccordionItem({ day, isOpen, onToggle, onChanged }) {
+export default function DayAccordionItem({ day, isOpen, onToggle, onChanged, isLastDay }) {
   const [showHotelPicker, setShowHotelPicker] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
   const activeActivities = new Set((day.day_activities ?? []).map((a) => a.activity))
 
   async function handleAddBlock() {
@@ -54,6 +60,17 @@ export default function DayAccordionItem({ day, isOpen, onToggle, onChanged }) {
     if (!confirm(`Delete Day ${day.day_number}? This can't be undone.`)) return
     await deleteDay(day.id)
     onChanged()
+  }
+
+  async function handleSaveDay() {
+    setSaving(true)
+    try {
+      await onChanged()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -133,31 +150,52 @@ export default function DayAccordionItem({ day, isOpen, onToggle, onChanged }) {
             </div>
           </div>
 
-          <div>
-            <p className="text-xs text-ink-400 mb-2 uppercase tracking-wide font-mono">
-              Hotel for the night
-            </p>
-            <RichTextBox
-              value={day.hotel_description}
-              onSave={handleHotelDescriptionSave}
-              placeholder="Describe the hotel…"
-            />
+          {!isLastDay && (
+            <div>
+              <p className="text-xs text-ink-400 mb-2 uppercase tracking-wide font-mono">
+                Hotel for the night
+              </p>
+              <RichTextBox
+                value={day.hotel_description}
+                onSave={handleHotelDescriptionSave}
+                placeholder="Describe the hotel…"
+              />
 
-            <div className="flex gap-2 mt-3 flex-wrap">
-              {(day.day_hotel_images ?? [])
-                .sort((a, b) => a.sort_order - b.sort_order)
-                .map((img) => (
-                  <div key={img.id} className="w-16 h-12 rounded-md overflow-hidden bg-sage-200">
-                    <img src={img.image_url} alt="" className="w-full h-full object-cover" />
-                  </div>
-                ))}
-              <button
-                onClick={() => setShowHotelPicker(true)}
-                className="w-16 h-12 rounded-md border border-dashed border-sage-300 flex items-center justify-center text-ink-400"
-              >
-                <IconPlus size={16} />
-              </button>
+              <div className="flex gap-2 mt-3 flex-wrap">
+                {(day.day_hotel_images ?? [])
+                  .sort((a, b) => a.sort_order - b.sort_order)
+                  .map((img) => (
+                    <div key={img.id} className="w-16 h-12 rounded-md overflow-hidden bg-sage-200">
+                      <img src={img.image_url} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                <button
+                  onClick={() => setShowHotelPicker(true)}
+                  className="w-16 h-12 rounded-md border border-dashed border-sage-300 flex items-center justify-center text-ink-400"
+                >
+                  <IconPlus size={16} />
+                </button>
+              </div>
             </div>
+          )}
+
+          {/* Save day button */}
+          <div className="pt-2 border-t border-sage-200 flex justify-end">
+            <button
+              onClick={handleSaveDay}
+              disabled={saving}
+              className={`flex items-center gap-1.5 rounded-full px-5 py-2 text-sm font-medium transition-colors ${
+                saved
+                  ? 'bg-forest-600/10 text-forest-600'
+                  : 'bg-forest-600 text-white hover:bg-forest-700'
+              } disabled:opacity-60`}
+            >
+              {saved ? (
+                <><IconCheck size={15} /> Saved</>
+              ) : (
+                <><IconDeviceFloppy size={15} /> {saving ? 'Saving…' : 'Save day'}</>
+              )}
+            </button>
           </div>
         </div>
       )}
