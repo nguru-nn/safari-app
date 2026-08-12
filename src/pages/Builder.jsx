@@ -163,13 +163,14 @@ export default function Builder() {
 
       {/* Days accordion */}
       <div className="flex flex-col gap-2">
-        {days.map((day) => (
+        {days.map((day, index) => (
           <DayAccordionItem
             key={day.id}
             day={day}
             isOpen={openDayId === day.id}
             onToggle={() => setOpenDayId(openDayId === day.id ? null : day.id)}
             onChanged={refresh}
+            isLastDay={index === days.length - 1}
           />
         ))}
 
