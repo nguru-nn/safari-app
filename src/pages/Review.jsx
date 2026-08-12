@@ -189,7 +189,7 @@ export default function Review() {
       {/* Days — all shown, uncompacted */}
       <div className="flex flex-col gap-2">
         <span className="text-xs text-ink-400 uppercase tracking-wide font-mono px-1">Days</span>
-        {days.map((day) => (
+        {days.map((day, index) => (
           <DayReviewRow
             key={day.id}
             day={day}
@@ -197,6 +197,7 @@ export default function Review() {
             isExpanded={expandedDayId === day.id}
             onToggleExpand={() => setExpandedDayId(expandedDayId === day.id ? null : day.id)}
             onChanged={refresh}
+            isLastDay={index === days.length - 1}
           />
         ))}
       </div>
