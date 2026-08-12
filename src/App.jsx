@@ -6,6 +6,8 @@ import Dashboard from './pages/Dashboard'
 import Builder from './pages/Builder'
 import Review from './pages/Review'
 import Translate from './pages/Translate'
+import Hotels from './pages/Hotels'
+import Team from './pages/Team'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -29,6 +31,8 @@ function AppRoutes() {
         <Route path="/builder/:id" element={<Builder />} />
         <Route path="/review/:id" element={<Review />} />
         <Route path="/translate/:id" element={<Translate />} />
+        <Route path="/hotels" element={<Hotels />} />
+        <Route path="/team" element={<Team />} />
       </Route>
     </Routes>
   )
