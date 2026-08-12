@@ -11,6 +11,9 @@ const ACTIVITY_LABELS = {
   sundowner: 'Sundowner',
   cycling: 'Cycling',
   boat_tour: 'Boat tour',
+  city_tour: 'City tour',
+  shopping: 'Shopping',
+  farm_tour: 'Farm tour',
   rest_day: 'Rest day',
 }
 
