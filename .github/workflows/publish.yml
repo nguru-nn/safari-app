@@ -1,0 +1,42 @@
+name: Publish safari page
+
+on:
+  repository_dispatch:
+    types: [safari-publish]
+
+jobs:
+  generate-and-deploy:
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event.client_payload.record.status == 'published' &&
+      github.event.client_payload.old_record.status != 'published'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --omit=dev @supabase/supabase-js
+
+      - name: Generate static page
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PUBLIC_SITE_BASE_URL: ${{ secrets.PUBLIC_SITE_BASE_URL }}
+        run: node scripts/generate-page.mjs --id=${{ github.event.client_payload.record.id }}
+
+      - name: Deploy to Hostinger
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.HOSTINGER_FTP_SERVER }}
+          username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
+          password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
+          local-dir: ./dist-public/safari/
+          server-dir: ./safari/
+          exclude: |
+            **/*
+            !${{ github.event.client_payload.record.slug }}.html
