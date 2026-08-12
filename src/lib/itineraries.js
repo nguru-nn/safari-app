@@ -345,17 +345,27 @@ export function validateItinerary(itinerary, days, pricing) {
     })
   }
 
-  for (const day of days) {
+  for (let i = 0; i < days.length; i++) {
+    const day = days[i]
+    const isLastDay = i === days.length - 1
+
     const hasText = (day.day_content_blocks ?? []).some((b) => (b.content ?? '').replace(/<[^>]*>/g, '').trim())
     if (!hasText) {
       issues.push({ scope: 'day', dayId: day.id, dayNumber: day.day_number, message: 'itinerary text is empty' })
     }
-    if (!(day.day_activities ?? []).length) {
-      issues.push({ scope: 'day', dayId: day.id, dayNumber: day.day_number, message: 'no activities selected' })
-    }
-    const hotelText = (day.hotel_description ?? '').replace(/<[^>]*>/g, '').trim()
-    if (!hotelText) {
-      issues.push({ scope: 'day', dayId: day.id, dayNumber: day.day_number, message: 'hotel description is empty' })
+
+    // Activities are optional — no validation needed
+
+    // Hotel is not required on the last day (departure day)
+    if (!isLastDay) {
+      const hotelText = (day.hotel_description ?? '').replace(/<[^>]*>/g, '').trim()
+      if (!hotelText) {
+        issues.push({ scope: 'day', dayId: day.id, dayNumber: day.day_number, message: 'hotel description is empty' })
+      }
+      const imageCount = (day.day_hotel_images ?? []).length
+      if (imageCount < 3) {
+        issues.push({ scope: 'day', dayId: day.id, dayNumber: day.day_number, message: `hotel needs at least 3 images (has ${imageCount})` })
+      }
     }
   }
 
