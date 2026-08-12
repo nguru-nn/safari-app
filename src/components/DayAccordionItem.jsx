@@ -21,6 +21,9 @@ const ACTIVITIES = [
   { value: 'sundowner', label: 'Sundowner' },
   { value: 'cycling', label: 'Cycling' },
   { value: 'boat_tour', label: 'Boat tour' },
+  { value: 'city_tour', label: 'City tour' },
+  { value: 'shopping', label: 'Shopping' },
+  { value: 'farm_tour', label: 'Farm tour' },
   { value: 'rest_day', label: 'Rest day' },
 ]
 
