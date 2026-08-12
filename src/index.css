@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
+@import "tailwindcss";
+
+/*
+  Design tokens derived from the reference UI kit:
+  soft sage background, floating white cards, deep forest-green accent,
+  bold geometric-sans headlines, fully pill-shaped controls, generous radius.
+*/
+@theme {
+  --color-sage-50: #f3f7ef;
+  --color-sage-100: #e7eee1;
+  --color-sage-200: #d3e0c8;
+  --color-sage-300: #b7cba6;
+  --color-forest-600: #2f4a3c;
+  --color-forest-700: #23372d;
+  --color-forest-800: #1a2921;
+  --color-tan-300: #e3c99a;
+  --color-ink-900: #1c231d;
+  --color-ink-600: #5b6b5e;
+  --color-ink-400: #8a978c;
+  --color-warn-100: #fbeed4;
+  --color-warn-600: #a8721f;
+  --color-danger-100: #f7e3df;
+  --color-danger-600: #b0503c;
+
+  --font-display: 'Space Grotesk', ui-sans-serif, sans-serif;
+  --font-body: 'Inter', ui-sans-serif, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --radius-card: 20px;
+  --radius-pill: 999px;
+}
+
+body {
+  background: var(--color-sage-100);
+  color: var(--color-ink-900);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* visible keyboard focus, kept subtle but real */
+:focus-visible {
+  outline: 2px solid var(--color-forest-600);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
