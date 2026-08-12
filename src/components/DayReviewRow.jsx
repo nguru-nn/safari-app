@@ -2,21 +2,25 @@ import { IconEdit, IconAlertTriangle } from '@tabler/icons-react'
 import DayAccordionItem from './DayAccordionItem'
 
 const ACTIVITY_LABELS = {
+  airport_transfer: 'Transfer',
+  game_drive: 'Game drive',
   hot_air_balloon: 'Balloon',
   cultural_visit: 'Cultural visit',
   bushwalk: 'Bushwalk',
   night_game_drive: 'Night drive',
+  sundowner: 'Sundowner',
   cycling: 'Cycling',
   boat_tour: 'Boat tour',
+  rest_day: 'Rest day',
 }
 
-export default function DayReviewRow({ day, issuesForDay, isExpanded, onToggleExpand, onChanged }) {
+export default function DayReviewRow({ day, issuesForDay, isExpanded, onToggleExpand, onChanged, isLastDay }) {
   const blockCount = day.day_content_blocks?.length ?? 0
   const hotelLabel = day.hotel_description ? stripHtml(day.hotel_description).slice(0, 40) : null
 
   if (isExpanded) {
     return (
-      <DayAccordionItem day={day} isOpen onToggle={onToggleExpand} onChanged={onChanged} />
+      <DayAccordionItem day={day} isOpen onToggle={onToggleExpand} onChanged={onChanged} isLastDay={isLastDay} />
     )
   }
 
