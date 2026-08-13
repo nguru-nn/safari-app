@@ -132,7 +132,7 @@ export default function Dashboard() {
                 </div>
                 {trip.slug && (
                   <a
-                    href={`/safari/${trip.slug}.html`}
+                    href={`https://trips.africanroutesafaris.com/${trip.slug}.html`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-xs text-forest-600 font-medium px-3 py-1.5 rounded-full bg-forest-600/10 hover:bg-forest-600/20 whitespace-nowrap"
