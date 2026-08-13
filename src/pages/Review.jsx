@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { IconLock, IconWorld, IconAlertTriangle, IconCopy, IconRefresh, IconTrash } from '@tabler/icons-react'
 import {
   getItinerary,
+  updateItinerary,
   listDays,
   listInclusionExclusions,
   listPricing,
@@ -143,7 +144,21 @@ export default function Review() {
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h1 className="font-display text-lg font-bold">{itinerary.itinerary_name}</h1>
+              <input
+                defaultValue={itinerary.itinerary_name}
+                onBlur={async (e) => {
+                  const val = e.target.value.trim()
+                  if (val && val !== itinerary.itinerary_name) {
+                    try {
+                      await updateItinerary(id, { itinerary_name: val })
+                      await refresh()
+                    } catch (err) {
+                      setError(err.message)
+                    }
+                  }
+                }}
+                className="font-display text-lg font-bold outline-none bg-transparent border-b border-transparent hover:border-sage-200 focus:border-forest-600 min-w-0 flex-1"
+              />
               <StatusBadge status={itinerary.status} />
             </div>
             <p className="text-ink-600 text-sm">
@@ -308,4 +323,3 @@ export default function Review() {
     </div>
   )
 }
-
