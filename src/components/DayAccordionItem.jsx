@@ -111,6 +111,24 @@ export default function DayAccordionItem({ day, isOpen, onToggle, onChanged, isL
         <div className="px-5 pb-5 border-t border-sage-200 pt-4 flex flex-col gap-5">
           <div>
             <p className="text-xs text-ink-400 mb-2 uppercase tracking-wide font-mono">
+              Location (for map)
+            </p>
+            <input
+              type="text"
+              defaultValue={day.location_name || ''}
+              placeholder="e.g. Masai Mara, Amboseli, JKIA…"
+              onBlur={async (e) => {
+                const val = e.target.value.trim()
+                if (val !== (day.location_name || '')) {
+                  await updateDay(day.id, { location_name: val })
+                  onChanged()
+                }
+              }}
+              className="w-full rounded-lg border border-sage-200 px-3 py-2 text-sm outline-none focus:border-forest-600"
+            />
+          </div>
+          <div>
+            <p className="text-xs text-ink-400 mb-2 uppercase tracking-wide font-mono">
               Itinerary content
             </p>
             <div className="flex flex-col gap-2">
