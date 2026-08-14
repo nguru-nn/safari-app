@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { IconPlus, IconCopy, IconExternalLink } from '@tabler/icons-react'
+import { IconPlus, IconCopy, IconExternalLink, IconLink } from '@tabler/icons-react'
 import { listItineraries, createItinerary, listPublishedTrips } from '../lib/itineraries'
 import StatusBadge from '../components/StatusBadge'
 import DuplicateModal from '../components/DuplicateModal'
@@ -12,6 +12,15 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
   const [duplicateSource, setDuplicateSource] = useState(null)
+  const [copiedId, setCopiedId] = useState(null)
+
+  function handleCopyLink(trip) {
+    const url = `https://trips.africanroutesafaris.com/${trip.slug}.html`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(trip.id)
+      setTimeout(() => setCopiedId(null), 2000)
+    })
+  }
 
   useEffect(() => {
     refresh()
@@ -131,14 +140,26 @@ export default function Dashboard() {
                   </p>
                 </div>
                 {trip.slug && (
-                  <a
-                    href={`https://trips.africanroutesafaris.com/${trip.slug}.html`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs text-forest-600 font-medium px-3 py-1.5 rounded-full bg-forest-600/10 hover:bg-forest-600/20 whitespace-nowrap"
-                  >
-                    <IconExternalLink size={13} /> View page
-                  </a>
+                  <>
+                    <button
+                      onClick={() => handleCopyLink(trip)}
+                      className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
+                        copiedId === trip.id
+                          ? 'bg-forest-600/10 text-forest-600'
+                          : 'bg-sage-100 text-ink-600 hover:bg-sage-200'
+                      }`}
+                    >
+                      <IconLink size={13} /> {copiedId === trip.id ? 'Copied!' : 'Copy link'}
+                    </button>
+                    <a
+                      href={`https://trips.africanroutesafaris.com/${trip.slug}.html`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-xs text-forest-600 font-medium px-3 py-1.5 rounded-full bg-forest-600/10 hover:bg-forest-600/20 whitespace-nowrap"
+                    >
+                      <IconExternalLink size={13} /> View page
+                    </a>
+                  </>
                 )}
                 <button
                   onClick={() => navigate(`/review/${trip.id}`)}
