@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { IconLock, IconWorld, IconAlertTriangle, IconCopy, IconRefresh, IconTrash, IconMail, IconCheck } from '@tabler/icons-react'
+import { IconLock, IconWorld, IconAlertTriangle, IconCopy, IconRefresh, IconTrash, IconMail, IconCheck, IconCamera } from '@tabler/icons-react'
 import {
   getItinerary,
   updateItinerary,
@@ -15,6 +15,7 @@ import {
   saveReviewNotes,
   createTranslation,
 } from '../lib/itineraries'
+import { uploadImage } from '../lib/storage'
 import { supabase, supabaseUrl } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import StatusBadge from '../components/StatusBadge'
@@ -45,6 +46,31 @@ export default function Review() {
   const [emailTo, setEmailTo] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [uploadingHero, setUploadingHero] = useState(false)
+
+  async function saveField(field, value) {
+    try {
+      await updateItinerary(id, { [field]: value })
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleHeroUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingHero(true)
+    try {
+      const url = await uploadImage('hero-images', file)
+      await updateItinerary(id, { hero_image_url: url })
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploadingHero(false)
+    }
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -183,33 +209,100 @@ export default function Review() {
 
       {/* Header / actions */}
       <div className="bg-white rounded-[var(--radius-card)] p-5">
+        {/* Hero image preview + upload */}
+        <div className="relative rounded-xl overflow-hidden h-32 bg-sage-200 mb-4">
+          {itinerary.hero_image_url ? (
+            <img src={itinerary.hero_image_url} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-ink-400 text-sm">No hero image</div>
+          )}
+          <label className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 text-xs font-medium text-forest-600 cursor-pointer hover:bg-white shadow">
+            <IconCamera size={14} /> {uploadingHero ? 'Uploading…' : 'Change hero'}
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} disabled={uploadingHero} />
+          </label>
+        </div>
+
         <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
               <input
                 defaultValue={itinerary.itinerary_name}
                 onBlur={async (e) => {
                   const val = e.target.value.trim()
-                  if (val && val !== itinerary.itinerary_name) {
-                    try {
-                      await updateItinerary(id, { itinerary_name: val })
-                      await refresh()
-                    } catch (err) {
-                      setError(err.message)
-                    }
-                  }
+                  if (val && val !== itinerary.itinerary_name) await saveField('itinerary_name', val)
                 }}
                 className="font-display text-lg font-bold outline-none bg-transparent border-b border-transparent hover:border-sage-200 focus:border-forest-600 min-w-0 flex-1"
               />
               <StatusBadge status={itinerary.status} />
             </div>
-            <p className="text-ink-600 text-sm">
-              Client: {itinerary.client_name || '—'} ·{' '}
-              {itinerary.safari_type === 'private' ? 'Private' : 'Shared'} ·{' '}
-              {itinerary.transportation === 'van' ? 'Van' : 'Off-road jeep'}
-            </p>
+
+            {/* Editable fields row */}
+            <div className="flex flex-wrap gap-x-4 gap-y-2 mt-2">
+              <label className="flex items-center gap-1.5 text-sm text-ink-600">
+                Client:
+                <input
+                  defaultValue={itinerary.client_name || ''}
+                  placeholder="Client name"
+                  onBlur={(e) => {
+                    const val = e.target.value.trim()
+                    if (val !== (itinerary.client_name || '')) saveField('client_name', val)
+                  }}
+                  className="outline-none bg-transparent border-b border-transparent hover:border-sage-200 focus:border-forest-600 w-36 text-ink-900"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-sm text-ink-600">
+                Type:
+                <select
+                  value={itinerary.safari_type || 'private'}
+                  onChange={(e) => saveField('safari_type', e.target.value)}
+                  className="outline-none bg-transparent border-b border-transparent hover:border-sage-200 focus:border-forest-600 text-ink-900 cursor-pointer"
+                >
+                  <option value="private">Private</option>
+                  <option value="shared">Shared</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5 text-sm text-ink-600">
+                Transport:
+                <select
+                  value={itinerary.transportation || 'offroad_jeep'}
+                  onChange={(e) => saveField('transportation', e.target.value)}
+                  className="outline-none bg-transparent border-b border-transparent hover:border-sage-200 focus:border-forest-600 text-ink-900 cursor-pointer"
+                >
+                  <option value="offroad_jeep">Off-road jeep</option>
+                  <option value="van">Van</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5 text-sm text-ink-600">
+                Template:
+                <select
+                  value={itinerary.template || 'safari_kenia'}
+                  onChange={(e) => saveField('template', e.target.value)}
+                  className="outline-none bg-transparent border-b border-transparent hover:border-sage-200 focus:border-forest-600 text-ink-900 cursor-pointer"
+                >
+                  <option value="safari_kenia">Safari Kenia</option>
+                  <option value="african_routes">African Routes</option>
+                </select>
+              </label>
+            </div>
+
+            {/* Slug / URL editor */}
+            {itinerary.slug && (
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-ink-400">
+                <span>URL:</span>
+                <input
+                  defaultValue={itinerary.slug}
+                  onBlur={async (e) => {
+                    const val = e.target.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-')
+                    if (val && val !== itinerary.slug) await saveField('slug', val)
+                  }}
+                  className="outline-none bg-transparent border-b border-transparent hover:border-sage-200 focus:border-forest-600 text-ink-600 flex-1 font-mono"
+                />
+                <span>.html</span>
+              </div>
+            )}
+
             {(itinerary.last_edited_by_name || itinerary.reviewed_by_name) && (
-              <p className="text-ink-400 text-xs mt-1">
+              <p className="text-ink-400 text-xs mt-2">
                 {itinerary.last_edited_by_name && `Edited by ${itinerary.last_edited_by_name}`}
                 {itinerary.last_edited_by_name && itinerary.reviewed_by_name && ' · '}
                 {itinerary.reviewed_by_name && `Approved by ${itinerary.reviewed_by_name}`}
@@ -417,4 +510,3 @@ export default function Review() {
     </div>
   )
 }
-
