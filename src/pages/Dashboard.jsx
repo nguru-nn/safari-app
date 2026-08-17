@@ -1,18 +1,30 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { IconPlus, IconCopy, IconExternalLink, IconLink } from '@tabler/icons-react'
+import { IconPlus, IconCopy, IconExternalLink, IconLink, IconTrash } from '@tabler/icons-react'
 import { listItineraries, createItinerary, listPublishedTrips } from '../lib/itineraries'
+import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
 import DuplicateModal from '../components/DuplicateModal'
 
+const ADMIN_EMAIL = 'njooro@gmail.com'
+
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { profile } = useAuth()
   const [itineraries, setItineraries] = useState(null)
   const [publishedTrips, setPublishedTrips] = useState([])
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
   const [duplicateSource, setDuplicateSource] = useState(null)
   const [copiedId, setCopiedId] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setIsAdmin(data?.user?.email === ADMIN_EMAIL)
+    })
+  }, [])
 
   function handleCopyLink(trip) {
     const url = `https://trips.africanroutesafaris.com/${trip.slug}.html`
@@ -53,6 +65,19 @@ export default function Dashboard() {
       setError(err.message)
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function handleDelete(trip) {
+    const label = trip.itinerary_name || 'Untitled safari'
+    if (!confirm(`Permanently delete "${label}"?\n\nThis removes the trip and all its days, translations, inclusions, and pricing. This cannot be undone.`)) return
+    setError('')
+    try {
+      const { error: delError } = await supabase.from('itineraries').delete().eq('id', trip.id)
+      if (delError) throw delError
+      await refresh()
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -100,6 +125,18 @@ export default function Dashboard() {
                   )}
                 </h2>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(trip)
+                      }}
+                      title="Delete trip"
+                      className="text-ink-400 hover:text-danger-600 p-1"
+                    >
+                      <IconTrash size={15} />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
