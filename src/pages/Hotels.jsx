@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { IconPlus, IconTrash, IconUpload, IconPhoto } from '@tabler/icons-react'
+import { useEffect, useState, useRef } from 'react'
+import { IconPlus, IconTrash, IconUpload, IconPhoto, IconLoader2 } from '@tabler/icons-react'
 import { listHotels, createHotel, addHotelImage, deleteHotel, deleteHotelImage } from '../lib/itineraries'
 import { uploadImage } from '../lib/storage'
 
@@ -9,7 +9,7 @@ export default function Hotels() {
   const [error, setError] = useState('')
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
-  const [uploadingFor, setUploadingFor] = useState(null) // hotel id currently uploading
+  const [uploadProgress, setUploadProgress] = useState({}) // { [hotelId]: { done: number, total: number } }
 
   useEffect(() => {
     refresh()
@@ -49,19 +49,31 @@ export default function Hotels() {
     }
   }
 
-  async function handleUploadImage(hotelId, file) {
-    setUploadingFor(hotelId)
+  async function handleUploadImages(hotelId, files) {
+    if (!files.length) return
     setError('')
-    try {
-      const url = await uploadImage('hotel-images', file)
-      const hotel = hotels.find((h) => h.id === hotelId)
-      await addHotelImage(hotelId, url, hotel?.hotel_images?.length ?? 0)
-      await refresh()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setUploadingFor(null)
+    const total = files.length
+    setUploadProgress((p) => ({ ...p, [hotelId]: { done: 0, total } }))
+
+    const hotel = hotels.find((h) => h.id === hotelId)
+    let startOrder = hotel?.hotel_images?.length ?? 0
+
+    for (let i = 0; i < files.length; i++) {
+      try {
+        const url = await uploadImage('hotel-images', files[i])
+        await addHotelImage(hotelId, url, startOrder + i)
+        setUploadProgress((p) => ({ ...p, [hotelId]: { done: i + 1, total } }))
+      } catch (err) {
+        setError(`Failed to upload ${files[i].name}: ${err.message}`)
+      }
     }
+
+    setUploadProgress((p) => {
+      const next = { ...p }
+      delete next[hotelId]
+      return next
+    })
+    await refresh()
   }
 
   async function handleDeleteImage(imgId) {
@@ -118,16 +130,23 @@ export default function Hotels() {
           {hotels.map((hotel) => {
             const images = (hotel.hotel_images ?? []).sort((a, b) => a.sort_order - b.sort_order)
             const coverImage = images[0]
+            const progress = uploadProgress[hotel.id]
 
             return (
               <div
                 key={hotel.id}
                 className="bg-white rounded-[var(--radius-card)] overflow-hidden hover:shadow-md transition-shadow"
               >
-                {/* Cover image */}
+                {/* Cover image — lazy loaded */}
                 <div className="w-full h-40 bg-sage-200 relative">
                   {coverImage ? (
-                    <img src={coverImage.image_url} alt="" className="w-full h-full object-cover" />
+                    <img
+                      src={coverImage.image_url}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-ink-400">
                       <IconPhoto size={32} />
@@ -156,11 +175,17 @@ export default function Hotels() {
                     </p>
                   )}
 
-                  {/* Image thumbnails */}
+                  {/* Image thumbnails — lazy loaded */}
                   <div className="flex gap-1.5 flex-wrap">
                     {images.map((img) => (
                       <div key={img.id} className="relative group w-14 h-10 rounded-md overflow-hidden bg-sage-200">
-                        <img src={img.image_url} alt="" className="w-full h-full object-cover" />
+                        <img
+                          src={img.image_url}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-cover"
+                        />
                         <button
                           onClick={() => handleDeleteImage(img.id)}
                           className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -170,23 +195,40 @@ export default function Hotels() {
                       </div>
                     ))}
                     <label className="w-14 h-10 rounded-md border border-dashed border-sage-300 flex items-center justify-center text-ink-400 cursor-pointer hover:border-forest-600 hover:text-forest-600">
-                      {uploadingFor === hotel.id ? (
-                        <span className="text-[9px]">…</span>
+                      {progress ? (
+                        <span className="text-[9px] font-mono text-forest-600">{progress.done}/{progress.total}</span>
                       ) : (
                         <IconUpload size={14} />
                       )}
                       <input
                         type="file"
                         accept="image/*"
+                        multiple
                         className="hidden"
                         onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleUploadImage(hotel.id, file)
+                          const files = Array.from(e.target.files || [])
+                          if (files.length) handleUploadImages(hotel.id, files)
+                          e.target.value = ''
                         }}
-                        disabled={uploadingFor === hotel.id}
+                        disabled={!!progress}
                       />
                     </label>
                   </div>
+
+                  {/* Upload progress bar */}
+                  {progress && (
+                    <div className="mt-2">
+                      <div className="h-1.5 bg-sage-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-forest-600 rounded-full transition-all duration-300"
+                          style={{ width: `${(progress.done / progress.total) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-ink-400 mt-1">
+                        Uploading {progress.done} of {progress.total}…
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )
