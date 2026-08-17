@@ -155,6 +155,15 @@ export default function Builder() {
             ]}
             onChange={(v) => handleFieldSave('transportation', v)}
           />
+          <LabeledSelect
+            label="Template"
+            value={itinerary.template || 'safari_kenia'}
+            options={[
+              { value: 'safari_kenia', label: 'Safari Kenia' },
+              { value: 'african_routes', label: 'African Routes' },
+            ]}
+            onChange={(v) => handleFieldSave('template', v)}
+          />
         </div>
 
         <div>
