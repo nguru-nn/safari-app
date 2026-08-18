@@ -223,8 +223,9 @@ export default function Review() {
         </div>
 
         <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
+          <div className="w-full">
+            {/* Title row — full width */}
+            <div className="flex items-center gap-2 mb-3">
               <input
                 defaultValue={itinerary.itinerary_name}
                 onBlur={async (e) => {
@@ -234,6 +235,47 @@ export default function Review() {
                 className="font-display text-lg font-bold outline-none bg-transparent border-b border-transparent hover:border-sage-200 focus:border-forest-600 min-w-0 flex-1"
               />
               <StatusBadge status={itinerary.status} />
+            </div>
+
+            {/* Action buttons row */}
+            <div className="flex items-center gap-2 flex-wrap mb-3 pb-3 border-b border-sage-200">
+              <button
+                onClick={() => setDuplicateSource(itinerary)}
+                className="flex items-center gap-1.5 rounded-full border border-sage-200 px-4 py-2 text-sm text-ink-900"
+              >
+                <IconCopy size={15} /> Duplicate
+              </button>
+              <TranslateDropdown onSelect={handleTranslate} disabled={translating} />
+              {isSupervisor ? (
+                <>
+                  {itinerary.status === 'published' && (
+                    <>
+                      <button
+                        onClick={openEmailModal}
+                        className="flex items-center gap-1.5 rounded-full border border-forest-600 text-forest-600 text-sm px-4 py-2"
+                      >
+                        <IconMail size={15} /> Send to client
+                      </button>
+                      <button
+                        onClick={handleRepublish}
+                        disabled={republishing}
+                        className="flex items-center gap-1.5 rounded-full border border-forest-600 text-forest-600 text-sm px-4 py-2 disabled:opacity-40"
+                      >
+                        <IconRefresh size={15} />
+                        {republishing ? 'Republishing…' : 'Republish'}
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={handlePublish}
+                    disabled={issues.length > 0 || publishing || itinerary.status === 'published'}
+                    className="flex items-center gap-1.5 rounded-full bg-forest-600 text-white text-sm px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {issues.length > 0 ? <IconLock size={15} /> : <IconWorld size={15} />}
+                    {itinerary.status === 'published' ? 'Published' : publishing ? 'Publishing…' : 'Publish'}
+                  </button>
+                </>
+              ) : null}
             </div>
 
             {/* Editable fields row */}
@@ -308,46 +350,6 @@ export default function Review() {
                 {itinerary.reviewed_by_name && `Approved by ${itinerary.reviewed_by_name}`}
               </p>
             )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setDuplicateSource(itinerary)}
-              className="flex items-center gap-1.5 rounded-full border border-sage-200 px-4 py-2 text-sm text-ink-900"
-            >
-              <IconCopy size={15} /> Duplicate
-            </button>
-            <TranslateDropdown onSelect={handleTranslate} disabled={translating} />
-            {isSupervisor ? (
-              <>
-                {itinerary.status === 'published' && (
-                  <>
-                    <button
-                      onClick={openEmailModal}
-                      className="flex items-center gap-1.5 rounded-full border border-forest-600 text-forest-600 text-sm px-4 py-2"
-                    >
-                      <IconMail size={15} /> Send to client
-                    </button>
-                    <button
-                      onClick={handleRepublish}
-                      disabled={republishing}
-                      className="flex items-center gap-1.5 rounded-full border border-forest-600 text-forest-600 text-sm px-4 py-2 disabled:opacity-40"
-                    >
-                      <IconRefresh size={15} />
-                      {republishing ? 'Republishing…' : 'Republish'}
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={handlePublish}
-                  disabled={issues.length > 0 || publishing || itinerary.status === 'published'}
-                  className="flex items-center gap-1.5 rounded-full bg-forest-600 text-white text-sm px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {issues.length > 0 ? <IconLock size={15} /> : <IconWorld size={15} />}
-                  {itinerary.status === 'published' ? 'Published' : publishing ? 'Publishing…' : 'Publish'}
-                </button>
-              </>
-            ) : null}
           </div>
         </div>
 
