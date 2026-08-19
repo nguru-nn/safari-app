@@ -325,6 +325,28 @@ export default function Review() {
                   <option value="african_routes">African Routes</option>
                 </select>
               </label>
+              <label className="flex items-center gap-1.5 text-sm text-ink-600">
+                Dates:
+                <input
+                  type="date"
+                  defaultValue={itinerary.start_date || ''}
+                  onBlur={(e) => {
+                    const val = e.target.value
+                    if (val !== (itinerary.start_date || '')) saveField('start_date', val)
+                  }}
+                  className="outline-none bg-transparent border-b border-transparent hover:border-sage-200 focus:border-forest-600 text-ink-900"
+                />
+                <span className="text-ink-400">–</span>
+                <input
+                  type="date"
+                  defaultValue={itinerary.end_date || ''}
+                  onBlur={(e) => {
+                    const val = e.target.value
+                    if (val !== (itinerary.end_date || '')) saveField('end_date', val)
+                  }}
+                  className="outline-none bg-transparent border-b border-transparent hover:border-sage-200 focus:border-forest-600 text-ink-900"
+                />
+              </label>
             </div>
 
             {/* Slug / URL editor */}
