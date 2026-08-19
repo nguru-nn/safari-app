@@ -18,6 +18,12 @@ import InclusionsExclusions from '../components/InclusionsExclusions'
 import PricingSection from '../components/PricingSection'
 import StatusBadge from '../components/StatusBadge'
 
+function tomorrowISO() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().split('T')[0]
+}
+
 export default function Builder() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -164,6 +170,18 @@ export default function Builder() {
             ]}
             onChange={(v) => handleFieldSave('template', v)}
           />
+          <LabeledInput
+            label="Start date"
+            type="date"
+            defaultValue={itinerary.start_date || tomorrowISO()}
+            onBlur={(v) => handleFieldSave('start_date', v)}
+          />
+          <LabeledInput
+            label="End date"
+            type="date"
+            defaultValue={itinerary.end_date || ''}
+            onBlur={(v) => handleFieldSave('end_date', v)}
+          />
         </div>
 
         <div>
@@ -213,12 +231,14 @@ export default function Builder() {
   )
 }
 
-function LabeledInput({ label, defaultValue, onBlur }) {
+function LabeledInput({ label, defaultValue, onBlur, type = 'text', placeholder }) {
   return (
     <div>
       <label className="text-xs text-ink-600 block mb-1">{label}</label>
       <input
+        type={type}
         defaultValue={defaultValue}
+        placeholder={placeholder}
         onBlur={(e) => onBlur(e.target.value)}
         className="w-full rounded-full border border-sage-200 px-3 py-1.5 text-sm outline-none focus:border-forest-600"
       />
