@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router'
 import { IconLayoutGrid, IconMap, IconUsers, IconLogout } from '@tabler/icons-react'
 import { useAuth } from '../contexts/AuthContext'
 
