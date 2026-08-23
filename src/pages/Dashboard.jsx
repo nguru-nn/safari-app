@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { IconPlus, IconCopy, IconExternalLink, IconLink, IconTrash } from '@tabler/icons-react'
 import { listItineraries, createItinerary, listPublishedTrips } from '../lib/itineraries'
 import { useAuth } from '../contexts/AuthContext'
