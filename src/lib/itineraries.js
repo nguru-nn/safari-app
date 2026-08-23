@@ -313,14 +313,27 @@ export async function listPricing(itineraryId) {
   return data
 }
 
-export async function upsertPricing(itineraryId, tier, price, quantity = 0, currency = 'USD') {
+export async function upsertPricing(itineraryId, tier, price, quantity = 0, currency = 'USD', vehicleType = 'jeep') {
   const { data, error } = await supabase
     .from('pricing')
-    .upsert({ itinerary_id: itineraryId, tier, price, quantity, currency }, { onConflict: 'itinerary_id,tier' })
+    .upsert(
+      { itinerary_id: itineraryId, tier, price, quantity, currency, vehicle_type: vehicleType },
+      { onConflict: 'itinerary_id,tier,vehicle_type' }
+    )
     .select()
     .single()
   if (error) throw error
   return data
+}
+
+// Removes a whole vehicle-type price group (e.g. when the user removes the VAN pricing block).
+export async function deletePricingGroup(itineraryId, vehicleType) {
+  const { error } = await supabase
+    .from('pricing')
+    .delete()
+    .eq('itinerary_id', itineraryId)
+    .eq('vehicle_type', vehicleType)
+  if (error) throw error
 }
 
 // ---- Review / publish workflow ----
@@ -390,12 +403,12 @@ export function validateItinerary(itinerary, days, pricing) {
     issues.push({ scope: 'trip', message: 'Hero image is missing' })
   }
 
-  const requiredTiers = ['adult']
-  const missingTiers = requiredTiers.filter((t) => !pricing.some((p) => p.tier === t))
-  if (missingTiers.length) {
+  // At least one price group (4X4 Jeep or Van) needs an adult price set before publishing.
+  const hasAdultPrice = pricing.some((p) => p.tier === 'adult' && Number(p.price) > 0)
+  if (!hasAdultPrice) {
     issues.push({
       scope: 'trip',
-      message: 'Missing price for adult',
+      message: 'Add at least one price (4X4 Jeep or Van) with an adult rate',
     })
   }
 
@@ -515,6 +528,7 @@ export async function duplicateItinerary(sourceId, { itineraryName, clientName }
         price: p.price,
         currency: p.currency,
         quantity: 0,
+        vehicle_type: p.vehicle_type,
       }))
     )
   }
@@ -602,6 +616,7 @@ export async function createTranslation(sourceItineraryId, language) {
         tier: p.tier,
         price: p.price,
         currency: p.currency,
+        vehicle_type: p.vehicle_type,
       }))
     )
   }
