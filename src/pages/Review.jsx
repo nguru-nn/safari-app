@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router'
 import { IconLock, IconWorld, IconAlertTriangle, IconCopy, IconRefresh, IconTrash, IconMail, IconCheck, IconCamera } from '@tabler/icons-react'
 import {
   getItinerary,
