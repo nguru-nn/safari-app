@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router'
 import { IconCopy } from '@tabler/icons-react'
 import { getItinerary, listDays, updateContentBlock, updateDay, updateItinerary } from '../lib/itineraries'
 import { useAuth } from '../contexts/AuthContext'
