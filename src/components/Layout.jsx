@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router'
-import { IconLayoutGrid, IconMap, IconUsers, IconLogout } from '@tabler/icons-react'
+import { IconLayoutGrid, IconMap, IconUsers, IconLogout, IconFileText } from '@tabler/icons-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Layout() {
@@ -10,6 +10,7 @@ export default function Layout() {
       <aside className="w-16 flex flex-col items-center gap-2 py-6 border-r border-sage-200/60">
         <NavItem to="/" icon={<IconLayoutGrid size={20} />} label="Trips" />
         <NavItem to="/hotels" icon={<IconMap size={20} />} label="Hotels" />
+        <NavItem to="/client-files" icon={<IconFileText size={20} />} label="Client Files" />
         {profile?.role === 'supervisor' && (
           <NavItem to="/team" icon={<IconUsers size={20} />} label="Team" />
         )}
