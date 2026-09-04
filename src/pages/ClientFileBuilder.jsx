@@ -10,8 +10,11 @@ import {
   deleteTransfer,
   addPayment,
   deletePayment,
+  addVoucher,
+  deleteVoucher,
   createInvoice,
   updateInvoice,
+  generateInvoicePdf,
   publishClientFile,
 } from '../lib/clientFiles'
 import { uploadPrivateFile, getPrivateFileUrl } from '../lib/storage'
@@ -123,16 +126,32 @@ export default function ClientFileBuilder() {
   }
 
   // ---- Payments (receipts / bank PoP) ----
+  // Selecting a file doesn't upload immediately — it opens a small inline form to
+  // capture the payment name and date first, then the actual upload+save happens on
+  // confirm. Keyed by doc_type so client-receipt and bank-PoP forms don't collide.
+  const [pendingPayment, setPendingPayment] = useState(null) // { docType, file, name, date }
 
-  async function handleUploadPayment(docType, fileList) {
-    const uploadFile = fileList?.[0]
-    if (!uploadFile) return
-    const paymentName = prompt(docType === 'client_receipt' ? 'Name this receipt (e.g. "Deposit")' : 'Name this payment (e.g. "Deposit", "Balance")')
-    if (!paymentName) return
+  function handleSelectPaymentFile(docType, fileList) {
+    const file = fileList?.[0]
+    if (!file) return
+    setPendingPayment({ docType, file, name: '', date: '' })
+  }
+
+  async function handleConfirmPayment() {
+    if (!pendingPayment?.name.trim()) {
+      setError('Payment name is required')
+      return
+    }
     setError('')
     try {
-      const path = await uploadPrivateFile('client-payment-docs', uploadFile, id)
-      await addPayment(id, { paymentName, docType, filePath: path })
+      const path = await uploadPrivateFile('client-payment-docs', pendingPayment.file, id)
+      await addPayment(id, {
+        paymentName: pendingPayment.name.trim(),
+        docType: pendingPayment.docType,
+        paymentDate: pendingPayment.date || null,
+        filePath: path,
+      })
+      setPendingPayment(null)
       await refresh()
     } catch (err) {
       setError(err.message)
@@ -155,6 +174,47 @@ export default function ClientFileBuilder() {
     try {
       const url = await getPrivateFileUrl('client-payment-docs', filePath)
       window.open(url, '_blank')
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // ---- Vouchers (booking / cancellation) ----
+
+  const [pendingVoucher, setPendingVoucher] = useState(null) // { voucherType, file, name }
+
+  function handleSelectVoucherFile(voucherType, fileList) {
+    const file = fileList?.[0]
+    if (!file) return
+    setPendingVoucher({ voucherType, file, name: '' })
+  }
+
+  async function handleConfirmVoucher() {
+    if (!pendingVoucher?.name.trim()) {
+      setError('Voucher name is required')
+      return
+    }
+    setError('')
+    try {
+      const path = await uploadPrivateFile('client-payment-docs', pendingVoucher.file, `${id}/vouchers`)
+      await addVoucher(id, {
+        voucherName: pendingVoucher.name.trim(),
+        voucherType: pendingVoucher.voucherType,
+        filePath: path,
+      })
+      setPendingVoucher(null)
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDeleteVoucher(voucherId) {
+    if (!confirm('Remove this voucher?')) return
+    setError('')
+    try {
+      await deleteVoucher(voucherId)
+      await refresh()
     } catch (err) {
       setError(err.message)
     }
@@ -191,11 +251,22 @@ export default function ClientFileBuilder() {
     }
   }
 
-  // PDF generation happens server-side (e.g. a generate-invoice-pdf Edge Function
-  // rendering with the same branding as templates.ts); this triggers it and stores
-  // the returned pdf_url. Left as a stub call — wire up the Edge Function endpoint here.
+  const [generatingPdf, setGeneratingPdf] = useState(false)
+
   async function handleGeneratePdf() {
-    setError('Invoice PDF generation endpoint not yet connected — see generate-invoice-pdf Edge Function.')
+    setGeneratingPdf(true)
+    setError('')
+    try {
+      // The PDF is rendered server-side from the DB row, so save any pending line-item
+      // edits first — otherwise the download could reflect stale numbers.
+      await handleSaveInvoice()
+      const signedUrl = await generateInvoicePdf(invoice.id)
+      window.open(signedUrl, '_blank')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setGeneratingPdf(false)
+    }
   }
 
   // ---- Publish ----
@@ -464,20 +535,58 @@ export default function ClientFileBuilder() {
               <button onClick={handleSaveInvoice} className="rounded-full bg-forest-600 text-white text-sm px-4 py-2">
                 Save invoice
               </button>
-              <button onClick={handleGeneratePdf} className="rounded-full bg-sage-100 text-sm px-4 py-2 flex items-center gap-1.5">
-                <IconDownload size={14} /> Download PDF
+              <button
+                onClick={handleGeneratePdf}
+                disabled={generatingPdf}
+                className="rounded-full bg-sage-100 text-sm px-4 py-2 flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {generatingPdf ? <IconLoader2 size={14} className="animate-spin" /> : <IconDownload size={14} />}
+                {generatingPdf ? 'Generating…' : 'Download PDF'}
               </button>
             </div>
           </div>
         )}
       </section>
 
+      {/* Pending payment name/date form — shown right after a file is picked */}
+      {pendingPayment && (
+        <section className="bg-white rounded-[var(--radius-card)] p-5 flex flex-col gap-3 border-2 border-forest-600">
+          <p className="text-sm text-ink-600">
+            Uploading <span className="font-medium text-ink-900">{pendingPayment.file.name}</span> — name this payment
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder='e.g. "Deposit", "Balance"'
+              value={pendingPayment.name}
+              onChange={(e) => setPendingPayment((p) => ({ ...p, name: e.target.value }))}
+              autoFocus
+              className="flex-1 rounded-full border border-sage-200 px-4 py-2 text-sm outline-none focus:border-forest-600"
+            />
+            <input
+              type="date"
+              value={pendingPayment.date}
+              onChange={(e) => setPendingPayment((p) => ({ ...p, date: e.target.value }))}
+              className="rounded-full border border-sage-200 px-4 py-2 text-sm outline-none focus:border-forest-600"
+            />
+          </div>
+          <div className="flex gap-2 self-end">
+            <button onClick={() => setPendingPayment(null)} className="text-sm px-4 py-2 text-ink-600">
+              Cancel
+            </button>
+            <button onClick={handleConfirmPayment} className="rounded-full bg-forest-600 text-white text-sm px-4 py-2">
+              Save payment
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Client receipts */}
       <UploadSection
         title="Client receipts*"
-        docType="client_receipt"
         items={(file.client_file_payments ?? []).filter((p) => p.doc_type === 'client_receipt')}
-        onUpload={(files) => handleUploadPayment('client_receipt', files)}
+        renderMeta={(p) => p.payment_date}
+        onSelectFile={(files) => handleSelectPaymentFile('client_receipt', files)}
         onView={handleViewPayment}
         onDelete={handleDeletePayment}
       />
@@ -485,12 +594,87 @@ export default function ClientFileBuilder() {
       {/* Bank receipts / PoP */}
       <UploadSection
         title="Bank receipts (Proof of Payment)"
-        docType="bank_pop"
         items={(file.client_file_payments ?? []).filter((p) => p.doc_type === 'bank_pop')}
-        onUpload={(files) => handleUploadPayment('bank_pop', files)}
+        renderMeta={(p) => p.payment_date}
+        onSelectFile={(files) => handleSelectPaymentFile('bank_pop', files)}
         onView={handleViewPayment}
         onDelete={handleDeletePayment}
       />
+
+      {/* Pending voucher name form */}
+      {pendingVoucher && (
+        <section className="bg-white rounded-[var(--radius-card)] p-5 flex flex-col gap-3 border-2 border-forest-600">
+          <p className="text-sm text-ink-600">
+            Uploading <span className="font-medium text-ink-900">{pendingVoucher.file.name}</span> — name this voucher
+          </p>
+          <input
+            type="text"
+            placeholder={pendingVoucher.voucherType === 'booking' ? 'e.g. "Hotel booking voucher"' : 'e.g. "Flight cancellation voucher"'}
+            value={pendingVoucher.name}
+            onChange={(e) => setPendingVoucher((v) => ({ ...v, name: e.target.value }))}
+            autoFocus
+            className="rounded-full border border-sage-200 px-4 py-2 text-sm outline-none focus:border-forest-600"
+          />
+          <div className="flex gap-2 self-end">
+            <button onClick={() => setPendingVoucher(null)} className="text-sm px-4 py-2 text-ink-600">
+              Cancel
+            </button>
+            <button onClick={handleConfirmVoucher} className="rounded-full bg-forest-600 text-white text-sm px-4 py-2">
+              Save voucher
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Booking / cancellation vouchers */}
+      <section className="bg-white rounded-[var(--radius-card)] p-5 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display font-semibold text-ink-900">Booking / cancellation vouchers</h2>
+          <div className="flex gap-2">
+            <label className="text-xs rounded-full bg-sage-100 px-3 py-1.5 flex items-center gap-1 cursor-pointer">
+              <IconUpload size={13} /> Booking
+              <input
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  handleSelectVoucherFile('booking', e.target.files)
+                  e.target.value = ''
+                }}
+              />
+            </label>
+            <label className="text-xs rounded-full bg-sage-100 px-3 py-1.5 flex items-center gap-1 cursor-pointer">
+              <IconUpload size={13} /> Cancellation
+              <input
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  handleSelectVoucherFile('cancellation', e.target.files)
+                  e.target.value = ''
+                }}
+              />
+            </label>
+          </div>
+        </div>
+        {(file.client_file_vouchers ?? []).length === 0 ? (
+          <p className="text-ink-400 text-sm">No vouchers uploaded yet.</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {file.client_file_vouchers.map((v) => (
+              <div key={v.id} className="flex items-center justify-between text-sm border border-sage-100 rounded-lg px-3 py-2">
+                <button onClick={() => handleViewPayment(v.file_path)} className="text-forest-700 hover:underline text-left flex items-center gap-2">
+                  {v.voucher_name}
+                  <span className="text-[10px] uppercase tracking-wide text-ink-400 bg-sage-100 rounded-full px-2 py-0.5">
+                    {v.voucher_type}
+                  </span>
+                </button>
+                <button onClick={() => handleDeleteVoucher(v.id)} className="text-ink-400 hover:text-danger-600">
+                  <IconTrash size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Publish */}
       <section className="bg-white rounded-[var(--radius-card)] p-5 flex items-center justify-between">
@@ -512,7 +696,7 @@ export default function ClientFileBuilder() {
   )
 }
 
-function UploadSection({ title, items, onUpload, onView, onDelete }) {
+function UploadSection({ title, items, onSelectFile, onView, onDelete, renderMeta }) {
   return (
     <section className="bg-white rounded-[var(--radius-card)] p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -523,7 +707,7 @@ function UploadSection({ title, items, onUpload, onView, onDelete }) {
             type="file"
             className="hidden"
             onChange={(e) => {
-              onUpload(e.target.files)
+              onSelectFile(e.target.files)
               e.target.value = ''
             }}
           />
@@ -538,9 +722,12 @@ function UploadSection({ title, items, onUpload, onView, onDelete }) {
               <button onClick={() => onView(p.file_path)} className="text-forest-700 hover:underline text-left">
                 {p.payment_name}
               </button>
-              <button onClick={() => onDelete(p.id)} className="text-ink-400 hover:text-danger-600">
-                <IconTrash size={14} />
-              </button>
+              <div className="flex items-center gap-3">
+                {renderMeta?.(p) && <span className="text-xs text-ink-400">{renderMeta(p)}</span>}
+                <button onClick={() => onDelete(p.id)} className="text-ink-400 hover:text-danger-600">
+                  <IconTrash size={14} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
