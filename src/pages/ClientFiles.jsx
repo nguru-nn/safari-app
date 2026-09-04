@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { IconPlus, IconFileText } from '@tabler/icons-react'
+import { IconPlus, IconFileText, IconCopy, IconExternalLink, IconCheck } from '@tabler/icons-react'
 import { listClientFiles, createClientFile } from '../lib/clientFiles'
 import ClientPickerModal from '../components/ClientPickerModal'
 
 const STATUS_STYLES = {
   draft: 'bg-sage-100 text-ink-600',
   confirmed: 'bg-amber-100 text-amber-800',
+  published: 'bg-forest-600 text-white',
   completed: 'bg-forest-100 text-forest-700',
   archived: 'bg-sage-100 text-ink-400',
 }
@@ -15,6 +16,68 @@ function formatDateRange(start, end) {
   if (!start || !end) return '—'
   const opts = { month: 'short', day: 'numeric' }
   return `${new Date(start).toLocaleDateString(undefined, opts)} – ${new Date(end).toLocaleDateString(undefined, opts)}`
+}
+
+function PublishedSection({ files }) {
+  const [copiedId, setCopiedId] = useState(null)
+
+  const published = files.filter((f) => f.status === 'published' && f.published_html_url)
+  if (published.length === 0) return null
+
+  function copy(text, id) {
+    navigator.clipboard.writeText(text)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500)
+  }
+
+  return (
+    <div className="mb-8">
+      <h2 className="font-display text-sm font-semibold text-ink-600 uppercase tracking-wide mb-3">
+        Published ({published.length})
+      </h2>
+      <div className="bg-white rounded-[var(--radius-card)] overflow-hidden">
+        {published.map((file) => (
+          <div
+            key={file.id}
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-sage-100 last:border-b-0"
+          >
+            <div className="min-w-0">
+              <p className="font-medium text-ink-900">{file.client_name}</p>
+              <a
+                href={file.published_html_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-forest-700 text-xs hover:underline break-all inline-flex items-center gap-1"
+              >
+                {file.published_html_url}
+                <IconExternalLink size={12} className="shrink-0" />
+              </a>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 bg-sage-100 rounded-full px-3 py-1.5">
+                <span className="text-[10px] uppercase tracking-wide text-ink-400">Code</span>
+                <span className="font-mono text-sm font-semibold text-ink-900">{file.publish_password_plain}</span>
+              </div>
+              <button
+                onClick={() => copy(file.published_html_url, `url-${file.id}`)}
+                title="Copy link"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-ink-600 hover:bg-sage-100"
+              >
+                {copiedId === `url-${file.id}` ? <IconCheck size={15} className="text-forest-600" /> : <IconCopy size={15} />}
+              </button>
+              <button
+                onClick={() => copy(`${file.published_html_url} — code ${file.publish_password_plain}`, `both-${file.id}`)}
+                className="text-xs rounded-full bg-forest-600 text-white px-3 py-1.5 whitespace-nowrap"
+              >
+                {copiedId === `both-${file.id}` ? 'Copied!' : 'Copy link + code'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export default function ClientFiles() {
@@ -81,6 +144,8 @@ export default function ClientFiles() {
           className="w-full max-w-sm rounded-full border border-sage-200 px-4 py-2.5 text-sm outline-none focus:border-forest-600"
         />
       </div>
+
+      {files && <PublishedSection files={files} />}
 
       {files === null ? (
         <p className="text-ink-600 text-sm">Loading…</p>
