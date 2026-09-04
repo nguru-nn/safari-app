@@ -64,6 +64,7 @@ export async function getClientFile(id) {
       *,
       client_file_transfers ( id, type, transfer_time, flight_details, airport, room_number, sort_order ),
       client_file_payments ( id, payment_name, doc_type, amount, currency, payment_date, file_path, uploaded_at ),
+      client_file_vouchers ( id, voucher_name, voucher_type, file_path, uploaded_at ),
       proforma_invoices ( id, invoice_number, template, currency, line_items, total_amount, issued_date, pdf_url, updated_at )
     `)
     .eq('id', id)
@@ -193,6 +194,30 @@ export async function addPayment(clientFileId, { paymentName, docType, amount, c
 
 export async function deletePayment(id) {
   const { error } = await supabase.from('client_file_payments').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---- Vouchers (booking / cancellation) ----
+// Same private bucket as payments, portal-viewable via signed URL, never published
+// to the public client-file page.
+
+export async function addVoucher(clientFileId, { voucherName, voucherType, filePath }) {
+  const { data, error } = await supabase
+    .from('client_file_vouchers')
+    .insert({
+      client_file_id: clientFileId,
+      voucher_name: voucherName,
+      voucher_type: voucherType,
+      file_path: filePath,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteVoucher(id) {
+  const { error } = await supabase.from('client_file_vouchers').delete().eq('id', id)
   if (error) throw error
 }
 
