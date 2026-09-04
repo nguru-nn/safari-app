@@ -1,195 +1,288 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
-import { IconPlus, IconFileText, IconCopy, IconExternalLink, IconCheck } from '@tabler/icons-react'
-import { listClientFiles, createClientFile } from '../lib/clientFiles'
-import ClientPickerModal from '../components/ClientPickerModal'
+import { supabase } from './supabase'
 
-const STATUS_STYLES = {
-  draft: 'bg-sage-100 text-ink-600',
-  confirmed: 'bg-amber-100 text-amber-800',
-  published: 'bg-forest-600 text-white',
-  completed: 'bg-forest-100 text-forest-700',
-  archived: 'bg-sage-100 text-ink-400',
+// ---- Clients (reusable across itineraries and client files) ----
+
+export async function listClients(searchTerm = '') {
+  let query = supabase.from('clients').select('id, full_name, email, phone, nationality')
+  if (searchTerm) query = query.ilike('full_name', `%${searchTerm}%`)
+  const { data, error } = await query.order('full_name').limit(20)
+  if (error) throw error
+  return data
 }
 
-function formatDateRange(start, end) {
-  if (!start || !end) return '—'
-  const opts = { month: 'short', day: 'numeric' }
-  return `${new Date(start).toLocaleDateString(undefined, opts)} – ${new Date(end).toLocaleDateString(undefined, opts)}`
+export async function createClient({ fullName, email, phone, nationality, passportNo, notes }) {
+  const { data, error } = await supabase
+    .from('clients')
+    .insert({
+      full_name: fullName,
+      email: email || null,
+      phone: phone || null,
+      nationality: nationality || null,
+      passport_no: passportNo || null,
+      notes: notes || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
 }
 
-function PublishedSection({ files }) {
-  const [copiedId, setCopiedId] = useState(null)
-
-  const published = files.filter((f) => f.status === 'published' && f.published_html_url)
-  if (published.length === 0) return null
-
-  function copy(text, id) {
-    navigator.clipboard.writeText(text)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500)
-  }
-
-  return (
-    <div className="mb-8">
-      <h2 className="font-display text-sm font-semibold text-ink-600 uppercase tracking-wide mb-3">
-        Published ({published.length})
-      </h2>
-      <div className="bg-white rounded-[var(--radius-card)] overflow-hidden">
-        {published.map((file) => (
-          <div
-            key={file.id}
-            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-sage-100 last:border-b-0"
-          >
-            <div className="min-w-0">
-              <p className="font-medium text-ink-900">{file.client_name}</p>
-              <a
-                href={file.published_html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-forest-700 text-xs hover:underline break-all inline-flex items-center gap-1"
-              >
-                {file.published_html_url}
-                <IconExternalLink size={12} className="shrink-0" />
-              </a>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="flex items-center gap-1.5 bg-sage-100 rounded-full px-3 py-1.5">
-                <span className="text-[10px] uppercase tracking-wide text-ink-400">Code</span>
-                <span className="font-mono text-sm font-semibold text-ink-900">{file.publish_password_plain}</span>
-              </div>
-              <button
-                onClick={() => copy(file.published_html_url, `url-${file.id}`)}
-                title="Copy link"
-                className="w-8 h-8 rounded-full flex items-center justify-center text-ink-600 hover:bg-sage-100"
-              >
-                {copiedId === `url-${file.id}` ? <IconCheck size={15} className="text-forest-600" /> : <IconCopy size={15} />}
-              </button>
-              <button
-                onClick={() => copy(`${file.published_html_url} — code ${file.publish_password_plain}`, `both-${file.id}`)}
-                className="text-xs rounded-full bg-forest-600 text-white px-3 py-1.5 whitespace-nowrap"
-              >
-                {copiedId === `both-${file.id}` ? 'Copied!' : 'Copy link + code'}
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
+// Clients that already appear on past itineraries, offered as quick-pick suggestions
+// alongside the dedicated `clients` table. Matches loosely on name.
+export async function listItineraryClientNames(searchTerm = '') {
+  let query = supabase.from('itineraries').select('client_name, client_email').not('client_name', 'is', null)
+  if (searchTerm) query = query.ilike('client_name', `%${searchTerm}%`)
+  const { data, error } = await query.order('updated_at', { ascending: false }).limit(50)
+  if (error) throw error
+  // De-dupe by name — several itineraries can share a client
+  const seen = new Set()
+  return data.filter((r) => {
+    if (seen.has(r.client_name)) return false
+    seen.add(r.client_name)
+    return true
+  })
 }
 
-export default function ClientFiles() {
-  const [files, setFiles] = useState(null)
-  const [search, setSearch] = useState('')
-  const [error, setError] = useState('')
-  const [showPicker, setShowPicker] = useState(false)
-  const [creating, setCreating] = useState(false)
+// ---- Client Files ----
 
-  useEffect(() => {
-    refresh()
-  }, [search])
+export async function listClientFiles(searchTerm = '') {
+  let query = supabase
+    .from('client_files')
+    .select(
+      'id, client_name, start_date, end_date, status, driver_name, slug, published_at, published_html_url, publish_password_plain, updated_at'
+    )
+  if (searchTerm) query = query.ilike('client_name', `%${searchTerm}%`)
+  const { data, error } = await query.order('updated_at', { ascending: false })
+  if (error) throw error
+  return data
+}
 
-  async function refresh() {
-    try {
-      setFiles(await listClientFiles(search))
-    } catch (err) {
-      setError(err.message)
-    }
+export async function getClientFile(id) {
+  const { data, error } = await supabase
+    .from('client_files')
+    .select(`
+      *,
+      client_file_transfers ( id, type, transfer_time, flight_details, airport, room_number, sort_order ),
+      client_file_payments ( id, payment_name, doc_type, amount, currency, payment_date, file_path, uploaded_at ),
+      proforma_invoices ( id, invoice_number, template, currency, line_items, total_amount, issued_date, pdf_url, updated_at )
+    `)
+    .eq('id', id)
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function createClientFile({
+  clientId,
+  clientName,
+  itineraryId,
+  startDate,
+  endDate,
+  itinerarySummary,
+  driverName,
+  guideName,
+}) {
+  const { data, error } = await supabase
+    .from('client_files')
+    .insert({
+      client_id: clientId || null,
+      client_name: clientName,
+      itinerary_id: itineraryId || null,
+      start_date: startDate,
+      end_date: endDate,
+      itinerary_summary: itinerarySummary || '',
+      driver_name: driverName,
+      guide_name: guideName || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateClientFile(id, patch) {
+  const { data, error } = await supabase
+    .from('client_files')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteClientFile(id) {
+  const { error } = await supabase.from('client_files').delete().eq('id', id)
+  if (error) throw error
+}
+
+// Client-side validation gating publish — mirrors validateItinerary's pattern.
+export function validateClientFile(file) {
+  const issues = []
+  if (!file.client_name?.trim()) issues.push('Client name is required')
+  if (!file.start_date || !file.end_date) issues.push('Travel dates are required')
+  if (!(file.itinerary_summary ?? '').replace(/<[^>]*>/g, '').trim()) issues.push('Itinerary summary is required')
+  if (!file.driver_name?.trim()) issues.push('Driver name is required')
+
+  const hasPickup = (file.client_file_transfers ?? []).some((t) => t.type === 'pickup')
+  const hasDropoff = (file.client_file_transfers ?? []).some((t) => t.type === 'dropoff')
+  if (!hasPickup) issues.push('At least one pickup detail is required')
+  if (!hasDropoff) issues.push('At least one drop-off detail is required')
+
+  const hasInvoice = (file.proforma_invoices ?? []).length > 0
+  if (!hasInvoice) issues.push('A proforma invoice is required')
+
+  const hasClientReceipt = (file.client_file_payments ?? []).some((p) => p.doc_type === 'client_receipt')
+  if (!hasClientReceipt) issues.push('At least one client receipt upload is required')
+
+  return issues
+}
+
+// ---- Transfers (pickup/drop-off legs) ----
+
+export async function addTransfer(clientFileId, { type, transferTime, flightDetails, airport, roomNumber, sortOrder = 0 }) {
+  const { data, error } = await supabase
+    .from('client_file_transfers')
+    .insert({
+      client_file_id: clientFileId,
+      type,
+      transfer_time: transferTime || null,
+      flight_details: flightDetails || null,
+      airport: airport || null,
+      room_number: roomNumber || null,
+      sort_order: sortOrder,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateTransfer(id, patch) {
+  const { data, error } = await supabase.from('client_file_transfers').update(patch).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteTransfer(id) {
+  const { error } = await supabase.from('client_file_transfers').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---- Payments (client receipts + bank proof-of-payment uploads) ----
+// Files themselves go to the private 'client-payment-docs' bucket via uploadPrivateFile
+// in storage.js; this just records the row pointing at the stored path.
+
+export async function addPayment(clientFileId, { paymentName, docType, amount, currency, paymentDate, filePath }) {
+  const { data, error } = await supabase
+    .from('client_file_payments')
+    .insert({
+      client_file_id: clientFileId,
+      payment_name: paymentName,
+      doc_type: docType,
+      amount: amount || null,
+      currency: currency || null,
+      payment_date: paymentDate || null,
+      file_path: filePath,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deletePayment(id) {
+  const { error } = await supabase.from('client_file_payments').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---- Proforma invoices ----
+
+export async function createInvoice(clientFileId, { template, currency, lineItems, totalAmount }) {
+  const { data: invoiceNumber, error: numError } = await supabase.rpc('next_invoice_number', { p_template: template })
+  if (numError) throw numError
+
+  const { data, error } = await supabase
+    .from('proforma_invoices')
+    .insert({
+      client_file_id: clientFileId,
+      invoice_number: invoiceNumber,
+      template,
+      currency,
+      line_items: lineItems,
+      total_amount: totalAmount,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateInvoice(id, patch) {
+  const { data, error } = await supabase.from('proforma_invoices').update(patch).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteInvoice(id) {
+  const { error } = await supabase.from('proforma_invoices').delete().eq('id', id)
+  if (error) throw error
+}
+
+// Directly invoked, not webhook-triggered — matches send-itinerary-email's pattern
+// (a user action, not a status-change side effect). Renders the PDF server-side via
+// pdf-lib and stores it in the private invoice-pdfs bucket, then returns a short-lived
+// signed URL for immediate download. Called again on every click, so edits since the
+// last download are always reflected — the bucket path is stable (invoiceId.pdf,
+// upsert: true) so it just overwrites.
+export async function generateInvoicePdf(invoiceId) {
+  const { data, error } = await supabase.functions.invoke('generate-invoice-pdf', {
+    body: { invoiceId },
+  })
+  if (error) throw error
+
+  const { data: signed, error: signError } = await supabase.storage.from('invoice-pdfs').createSignedUrl(data.path, 300)
+  if (signError) throw signError
+  return signed.signedUrl
+}
+
+// ---- Publishing ----
+
+// Generates a random 5-digit password, hashes it with SHA-256 (Web Crypto — no extra
+// dependency), stores the hash for the published page's client-side check and the
+// plaintext for portal-only display, per the operator's requirement.
+async function generatePublishPassword() {
+  const plain = String(Math.floor(10000 + Math.random() * 90000))
+  const enc = new TextEncoder().encode(plain)
+  const digest = await crypto.subtle.digest('SHA-256', enc)
+  const hash = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  return { plain, hash }
+}
+
+// Publishing itself (rendering + SFTP upload) happens server-side, exactly like
+// itineraries: a Postgres trigger (on_client_file_status_change) fires the moment
+// `status` flips to 'published' and calls the publish-client-file Edge Function via
+// pg_net — there's no direct function invoke from the app. This just prepares the
+// slug/password first, then flips status in the same update to trigger it.
+export async function publishClientFile(id) {
+  const { plain, hash } = await generatePublishPassword()
+  const slug = `cf-${id.slice(0, 8)}`
+
+  await updateClientFile(id, {
+    slug,
+    publish_password_hash: hash,
+    publish_password_plain: plain,
+    status: 'published',
+  })
+
+  // The Edge Function runs asynchronously after the trigger fires; poll briefly for
+  // published_html_url so the UI can show the live link without a manual refresh.
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 1000))
+    const file = await getClientFile(id)
+    if (file.published_html_url) return file
   }
-
-  // After picking/creating a client, immediately create a draft client file and
-  // let ClientFileBuilder handle the rest — mirrors how Builder.jsx starts an itinerary.
-  async function handleClientSelected(client) {
-    setCreating(true)
-    setError('')
-    try {
-      const file = await createClientFile({
-        clientId: client.id || null,
-        clientName: client.full_name,
-        startDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10), // tomorrow, matches Builder.jsx default
-        endDate: new Date(Date.now() + 86400000 * 8).toISOString().slice(0, 10),
-        itinerarySummary: '',
-        driverName: '',
-      })
-      window.location.href = `/client-files/${file.id}`
-    } catch (err) {
-      setError(err.message)
-      setCreating(false)
-    }
-  }
-
-  return (
-    <div className="max-w-5xl mx-auto pt-4">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display text-2xl font-bold">Client Files</h1>
-        <button
-          onClick={() => setShowPicker(true)}
-          disabled={creating}
-          className="flex items-center gap-1.5 rounded-full bg-forest-600 text-white text-sm font-medium px-5 py-2.5 disabled:opacity-50"
-        >
-          <IconPlus size={16} /> New client file
-        </button>
-      </div>
-
-      {error && <p className="text-danger-600 text-sm mb-4">{error}</p>}
-
-      <div className="mb-6">
-        <input
-          type="text"
-          placeholder="Search by client name…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-sm rounded-full border border-sage-200 px-4 py-2.5 text-sm outline-none focus:border-forest-600"
-        />
-      </div>
-
-      {files && <PublishedSection files={files} />}
-
-      {files === null ? (
-        <p className="text-ink-600 text-sm">Loading…</p>
-      ) : files.length === 0 ? (
-        <div className="bg-white rounded-[var(--radius-card)] p-10 text-center text-ink-600">
-          No client files yet. Start one above.
-        </div>
-      ) : (
-        <div className="bg-white rounded-[var(--radius-card)] overflow-hidden">
-          {files.map((file) => (
-            <Link
-              key={file.id}
-              to={`/client-files/${file.id}`}
-              className="flex items-center justify-between px-5 py-4 border-b border-sage-100 last:border-b-0 hover:bg-sage-50 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-sage-100 flex items-center justify-center text-ink-500">
-                  <IconFileText size={16} />
-                </div>
-                <div>
-                  <p className="font-medium text-ink-900">{file.client_name}</p>
-                  <p className="text-ink-400 text-xs">{formatDateRange(file.start_date, file.end_date)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {file.driver_name && <span className="text-ink-400 text-xs hidden sm:inline">Driver: {file.driver_name}</span>}
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[file.status] ?? STATUS_STYLES.draft}`}>
-                  {file.status}
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {showPicker && (
-        <ClientPickerModal
-          onClose={() => setShowPicker(false)}
-          onSelect={(client) => {
-            setShowPicker(false)
-            handleClientSelected(client)
-          }}
-        />
-      )}
-    </div>
-  )
+  return getClientFile(id) // may still be publishing — portal shows status as-is
 }
