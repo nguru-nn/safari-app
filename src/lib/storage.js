@@ -2,6 +2,8 @@ import { supabase } from './supabase'
 
 // Buckets are created once via the Supabase dashboard (Storage → New bucket):
 // 'hero-images' and 'hotel-images', both public.
+// 'client-payment-docs' and 'invoice-pdfs' are created via migration, both private —
+// see uploadPrivateFile / getPrivateFileUrl below.
 
 // Resizes/re-encodes an image in the browser before upload. Hotel thumbnails render
 // at ~140x100 and the lightbox never exceeds viewport width, so there's no reason to
@@ -51,6 +53,12 @@ export async function uploadImage(bucket, file) {
   const { data } = supabase.storage.from(bucket).getPublicUrl(path)
   return data.publicUrl
 }
+
+// ---- Private uploads (client receipts, bank proof-of-payment, invoice PDFs) ----
+// Unlike uploadImage, these buckets have no public access — a file is only reachable
+// via a short-lived signed URL, generated on demand, never stored. Used for anything
+// that shouldn't be reachable by a guessed or leaked link indefinitely.
+
 export async function uploadPrivateFile(bucket, file, folder = '') {
   const ext = file.name.split('.').pop()
   const path = folder ? `${folder}/${crypto.randomUUID()}.${ext}` : `${crypto.randomUUID()}.${ext}`
