@@ -8,6 +8,8 @@ import Review from './pages/Review'
 import Translate from './pages/Translate'
 import Hotels from './pages/Hotels'
 import Team from './pages/Team'
+import ClientFiles from './pages/ClientFiles'
+import ClientFileBuilder from './pages/ClientFileBuilder'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -32,6 +34,8 @@ function AppRoutes() {
         <Route path="/review/:id" element={<Review />} />
         <Route path="/translate/:id" element={<Translate />} />
         <Route path="/hotels" element={<Hotels />} />
+        <Route path="/client-files" element={<ClientFiles />} />
+        <Route path="/client-files/:id" element={<ClientFileBuilder />} />
         <Route path="/team" element={<Team />} />
       </Route>
     </Routes>
