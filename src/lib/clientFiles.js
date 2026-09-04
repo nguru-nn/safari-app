@@ -256,19 +256,17 @@ export async function deleteInvoice(id) {
 
 // Directly invoked, not webhook-triggered — matches send-itinerary-email's pattern
 // (a user action, not a status-change side effect). Renders the PDF server-side via
-// pdf-lib and stores it in the private invoice-pdfs bucket, then returns a short-lived
-// signed URL for immediate download. Called again on every click, so edits since the
-// last download are always reflected — the bucket path is stable (invoiceId.pdf,
-// upsert: true) so it just overwrites.
+// pdf-lib and SFTPs it straight to trips.africanroutesafaris.com/pdf/, the same
+// subdomain the published client-file pages live on — so the link is stable and
+// domain-independent of whichever Supabase project is generating it. Called again on
+// every click, so edits since the last download are always reflected — the filename
+// is stable (invoiceId.pdf) so it just overwrites on the server.
 export async function generateInvoicePdf(invoiceId) {
   const { data, error } = await supabase.functions.invoke('generate-invoice-pdf', {
     body: { invoiceId },
   })
   if (error) throw error
-
-  const { data: signed, error: signError } = await supabase.storage.from('invoice-pdfs').createSignedUrl(data.path, 300)
-  if (signError) throw signError
-  return signed.signedUrl
+  return data.url
 }
 
 // ---- Publishing ----
