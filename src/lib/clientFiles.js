@@ -227,6 +227,23 @@ export async function deleteInvoice(id) {
   if (error) throw error
 }
 
+// Directly invoked, not webhook-triggered — matches send-itinerary-email's pattern
+// (a user action, not a status-change side effect). Renders the PDF server-side via
+// pdf-lib and stores it in the private invoice-pdfs bucket, then returns a short-lived
+// signed URL for immediate download. Called again on every click, so edits since the
+// last download are always reflected — the bucket path is stable (invoiceId.pdf,
+// upsert: true) so it just overwrites.
+export async function generateInvoicePdf(invoiceId) {
+  const { data, error } = await supabase.functions.invoke('generate-invoice-pdf', {
+    body: { invoiceId },
+  })
+  if (error) throw error
+
+  const { data: signed, error: signError } = await supabase.storage.from('invoice-pdfs').createSignedUrl(data.path, 300)
+  if (signError) throw signError
+  return signed.signedUrl
+}
+
 // ---- Publishing ----
 
 // Generates a random 5-digit password, hashes it with SHA-256 (Web Crypto — no extra
@@ -242,23 +259,28 @@ async function generatePublishPassword() {
   return { plain, hash }
 }
 
-// Publishing itself (rendering + SFTP upload) happens server-side in the
-// publish-client-file Edge Function. This just prepares the slug/password and
-// invokes it, matching the existing publish-to-hostinger call pattern.
+// Publishing itself (rendering + SFTP upload) happens server-side, exactly like
+// itineraries: a Postgres trigger (on_client_file_status_change) fires the moment
+// `status` flips to 'published' and calls the publish-client-file Edge Function via
+// pg_net — there's no direct function invoke from the app. This just prepares the
+// slug/password first, then flips status in the same update to trigger it.
 export async function publishClientFile(id) {
   const { plain, hash } = await generatePublishPassword()
-
   const slug = `cf-${id.slice(0, 8)}`
+
   await updateClientFile(id, {
     slug,
     publish_password_hash: hash,
     publish_password_plain: plain,
-    status: 'confirmed',
+    status: 'published',
   })
 
-  const { data, error } = await supabase.functions.invoke('publish-client-file', {
-    body: { clientFileId: id },
-  })
-  if (error) throw error
-  return data // { publishedUrl }
+  // The Edge Function runs asynchronously after the trigger fires; poll briefly for
+  // published_html_url so the UI can show the live link without a manual refresh.
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 1000))
+    const file = await getClientFile(id)
+    if (file.published_html_url) return file
+  }
+  return getClientFile(id) // may still be publishing — portal shows status as-is
 }
