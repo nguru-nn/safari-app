@@ -65,7 +65,7 @@ export async function getClientFile(id) {
       client_file_transfers ( id, type, transfer_time, flight_details, airport, room_number, sort_order ),
       client_file_payments ( id, payment_name, doc_type, amount, currency, payment_date, file_path, uploaded_at ),
       client_file_vouchers ( id, voucher_name, voucher_type, file_path, uploaded_at ),
-      proforma_invoices ( id, invoice_number, template, currency, line_items, total_amount, issued_date, pdf_url, updated_at )
+      proforma_invoices ( id, invoice_number, template, currency, line_items, total_amount, issued_date, pdf_url, bill_to_name, bill_to_phone, bill_to_email, updated_at )
     `)
     .eq('id', id)
     .single()
@@ -223,7 +223,7 @@ export async function deleteVoucher(id) {
 
 // ---- Proforma invoices ----
 
-export async function createInvoice(clientFileId, { template, currency, lineItems, totalAmount }) {
+export async function createInvoice(clientFileId, { template, currency, lineItems, totalAmount, billToName, billToPhone, billToEmail }) {
   const { data: invoiceNumber, error: numError } = await supabase.rpc('next_invoice_number', { p_template: template })
   if (numError) throw numError
 
@@ -236,6 +236,9 @@ export async function createInvoice(clientFileId, { template, currency, lineItem
       currency,
       line_items: lineItems,
       total_amount: totalAmount,
+      bill_to_name: billToName || null,
+      bill_to_phone: billToPhone || null,
+      bill_to_email: billToEmail || null,
     })
     .select()
     .single()
