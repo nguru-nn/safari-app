@@ -244,6 +244,7 @@ export default function ClientFileBuilder() {
     roomsSingle: '',
     roomsDouble: '',
     roomsTriple: '',
+    roomsTwin: '',
     activity: '',
     transfer: '',
     charges: '',
@@ -895,6 +896,7 @@ export default function ClientFileBuilder() {
               <VField label="Single rooms" type="number" value={voucherForm.roomsSingle} onChange={(v) => handleVoucherFormField('roomsSingle', v)} />
               <VField label="Double rooms" type="number" value={voucherForm.roomsDouble} onChange={(v) => handleVoucherFormField('roomsDouble', v)} />
               <VField label="Triple rooms" type="number" value={voucherForm.roomsTriple} onChange={(v) => handleVoucherFormField('roomsTriple', v)} />
+              <VField label="Twin rooms" type="number" value={voucherForm.roomsTwin} onChange={(v) => handleVoucherFormField('roomsTwin', v)} />
 
               <VField label="Activity" value={voucherForm.activity} onChange={(v) => handleVoucherFormField('activity', v)} span={2} />
               <VField label="Transfer" value={voucherForm.transfer} onChange={(v) => handleVoucherFormField('transfer', v)} span={2} />
