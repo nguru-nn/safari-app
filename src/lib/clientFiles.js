@@ -221,6 +221,26 @@ export async function deleteVoucher(id) {
   if (error) throw error
 }
 
+// Saves the entered fields as a draft — no PDF generated yet, so this can be done
+// before all fields are ready. Generate PDF (below) is a separate, later action.
+export async function saveVoucherDraft(clientFileId, voucherType, formData, issuedByName) {
+  const { data, error } = await supabase
+    .from('client_file_vouchers')
+    .insert({
+      client_file_id: clientFileId,
+      voucher_name: `${voucherType === 'booking' ? 'Booking' : 'Cancellation'} voucher (draft)`,
+      voucher_type: voucherType,
+      form_data: formData,
+      issued_by_name: issuedByName || null,
+      file_path: null,
+      pdf_url: null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 // Directly invoked, like generateInvoicePdf — a user action, not a status-change side
 // effect. The Edge Function derives "issued by" from the caller's own auth token
 // (never from formData), so it can't be spoofed and always reflects who generated it.
