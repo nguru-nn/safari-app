@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router'
-import { IconPlus, IconTrash, IconUpload, IconDownload, IconLoader2, IconCopy } from '@tabler/icons-react'
+import { IconPlus, IconTrash, IconUpload, IconDownload, IconLoader2, IconCopy, IconFileText } from '@tabler/icons-react'
+import { useAuth } from '../contexts/AuthContext'
 import {
   getClientFile,
   updateClientFile,
@@ -12,6 +13,7 @@ import {
   deletePayment,
   addVoucher,
   deleteVoucher,
+  generateVoucher,
   createInvoice,
   updateInvoice,
   generateInvoicePdf,
@@ -27,6 +29,7 @@ const TEMPLATES = [
 export default function ClientFileBuilder() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { profile } = useAuth()
 
   const [file, setFile] = useState(null)
   const [error, setError] = useState('')
@@ -220,7 +223,60 @@ export default function ClientFileBuilder() {
     }
   }
 
-  // ---- Invoice ----
+  // ---- Voucher generation (booking/cancellation) — separate from uploads above ----
+
+  const emptyVoucherForm = {
+    hotelName: '',
+    hotelPhone: '',
+    hotelEmail: '',
+    contactPerson: '',
+    date: new Date().toISOString().slice(0, 10),
+    nationality: '',
+    adults: '',
+    children: '',
+    checkIn: '',
+    checkOut: '',
+    eta: '',
+    meals: '',
+    specialMealRequest: '',
+    roomsSingle: '',
+    roomsDouble: '',
+    roomsTriple: '',
+    activity: '',
+    transfer: '',
+    charges: '',
+    specialInstructions: '',
+  }
+
+  const [generatingVoucherType, setGeneratingVoucherType] = useState(null) // 'booking' | 'cancellation' | null
+  const [voucherForm, setVoucherForm] = useState(emptyVoucherForm)
+  const [savingVoucher, setSavingVoucher] = useState(false)
+
+  function openVoucherGenerator(voucherType) {
+    setVoucherForm(emptyVoucherForm)
+    setGeneratingVoucherType(voucherType)
+  }
+
+  function handleVoucherFormField(field, value) {
+    setVoucherForm((f) => ({ ...f, [field]: value }))
+  }
+
+  async function handleGenerateVoucher() {
+    setSavingVoucher(true)
+    setError('')
+    try {
+      // Client name and "issued by" are deliberately not part of the submitted form —
+      // client name comes from this client file, and issued-by is derived server-side
+      // from the caller's own auth token, so neither can be edited or spoofed here.
+      await generateVoucher(id, generatingVoucherType, voucherForm)
+      setGeneratingVoucherType(null)
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingVoucher(false)
+    }
+  }
 
   const invoice = file?.proforma_invoices?.[0]
 
@@ -280,14 +336,12 @@ export default function ClientFileBuilder() {
       // edits first — otherwise the download could reflect stale numbers.
       await handleSaveInvoice()
       const url = await generateInvoicePdf(invoice.id)
-      // Update local state so the "View PDF" link renders immediately — window.open
-      // after an await is frequently blocked by popup blockers, so a real clickable
-      // link is the reliable path rather than depending on the popup succeeding.
-      setFile((f) => ({
-        ...f,
-        proforma_invoices: f.proforma_invoices.map((inv) => (inv.id === invoice.id ? { ...inv, pdf_url: url } : inv)),
-      }))
-      window.open(url, '_blank') // best-effort; the link below is the reliable fallback
+      // Refresh from the DB (rather than patching state manually) so invoice.updated_at
+      // comes through fresh — it's used below and elsewhere as a cache-busting key,
+      // since the PDF filename is stable (invoiceId.pdf) and the browser/CDN would
+      // otherwise keep serving the previous file's cached bytes after a regenerate.
+      await refresh()
+      window.open(`${url}?v=${Date.now()}`, '_blank') // best-effort; the link below is the reliable fallback
     } catch (err) {
       setError(err.message)
     } finally {
@@ -307,7 +361,10 @@ export default function ClientFileBuilder() {
     setDownloadingPdf(true)
     setError('')
     try {
-      const res = await fetch(invoice.pdf_url)
+      // Cache-busted with updated_at (changes on every regenerate) plus a hard
+      // no-store — the filename is stable (invoiceId.pdf), so without this the
+      // browser/CDN would keep serving the previous file's cached bytes.
+      const res = await fetch(`${invoice.pdf_url}?v=${encodeURIComponent(invoice.updated_at)}`, { cache: 'no-store' })
       if (!res.ok) throw new Error('Could not fetch the PDF file')
       const blob = await res.blob()
       const blobUrl = URL.createObjectURL(blob)
@@ -640,7 +697,7 @@ export default function ClientFileBuilder() {
                     {downloadingPdf ? 'Downloading…' : 'Download'}
                   </button>
                   <a
-                    href={invoice.pdf_url}
+                    href={`${invoice.pdf_url}?v=${encodeURIComponent(invoice.updated_at)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="rounded-full text-sm px-4 py-2 text-forest-700 underline underline-offset-2"
@@ -734,11 +791,17 @@ export default function ClientFileBuilder() {
 
       {/* Booking / cancellation vouchers */}
       <section className="bg-white rounded-[var(--radius-card)] p-5 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="font-display font-semibold text-ink-900">Booking / cancellation vouchers</h2>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => openVoucherGenerator('booking')} className="text-xs rounded-full bg-forest-600 text-white px-3 py-1.5 flex items-center gap-1">
+              <IconFileText size={13} /> Generate booking
+            </button>
+            <button onClick={() => openVoucherGenerator('cancellation')} className="text-xs rounded-full bg-forest-600 text-white px-3 py-1.5 flex items-center gap-1">
+              <IconFileText size={13} /> Generate cancellation
+            </button>
             <label className="text-xs rounded-full bg-sage-100 px-3 py-1.5 flex items-center gap-1 cursor-pointer">
-              <IconUpload size={13} /> Booking
+              <IconUpload size={13} /> Upload booking
               <input
                 type="file"
                 className="hidden"
@@ -749,7 +812,7 @@ export default function ClientFileBuilder() {
               />
             </label>
             <label className="text-xs rounded-full bg-sage-100 px-3 py-1.5 flex items-center gap-1 cursor-pointer">
-              <IconUpload size={13} /> Cancellation
+              <IconUpload size={13} /> Upload cancellation
               <input
                 type="file"
                 className="hidden"
@@ -761,21 +824,97 @@ export default function ClientFileBuilder() {
             </label>
           </div>
         </div>
+
+        {/* Inline voucher generator form */}
+        {generatingVoucherType && (
+          <div className="border-2 border-forest-600 rounded-xl p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-ink-900">
+                Generate {generatingVoucherType === 'booking' ? 'booking' : 'cancellation'} voucher
+              </p>
+              <span className="text-xs text-ink-400">Client: {file.client_name}</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <VField label="Hotel Name" value={voucherForm.hotelName} onChange={(v) => handleVoucherFormField('hotelName', v)} span={2} />
+              <VField label="Phone" value={voucherForm.hotelPhone} onChange={(v) => handleVoucherFormField('hotelPhone', v)} />
+              <VField label="Email" value={voucherForm.hotelEmail} onChange={(v) => handleVoucherFormField('hotelEmail', v)} />
+              <VField label="Contact Person" value={voucherForm.contactPerson} onChange={(v) => handleVoucherFormField('contactPerson', v)} span={2} />
+              <VField label="Date" type="date" value={voucherForm.date} onChange={(v) => handleVoucherFormField('date', v)} span={2} />
+
+              <VField label="Nationality" value={voucherForm.nationality} onChange={(v) => handleVoucherFormField('nationality', v)} />
+              <VField label="Adults" type="number" value={voucherForm.adults} onChange={(v) => handleVoucherFormField('adults', v)} />
+              <VField label="Children" type="number" value={voucherForm.children} onChange={(v) => handleVoucherFormField('children', v)} />
+              <VField label="ETA" value={voucherForm.eta} onChange={(v) => handleVoucherFormField('eta', v)} />
+
+              <VField label="Check-in (IN)" type="date" value={voucherForm.checkIn} onChange={(v) => handleVoucherFormField('checkIn', v)} span={2} />
+              <VField label="Check-out (OUT)" type="date" value={voucherForm.checkOut} onChange={(v) => handleVoucherFormField('checkOut', v)} span={2} />
+
+              <VField label="Meals" value={voucherForm.meals} onChange={(v) => handleVoucherFormField('meals', v)} span={2} />
+              <VField label="Special Meal Request" value={voucherForm.specialMealRequest} onChange={(v) => handleVoucherFormField('specialMealRequest', v)} span={2} />
+
+              <VField label="Single rooms" type="number" value={voucherForm.roomsSingle} onChange={(v) => handleVoucherFormField('roomsSingle', v)} />
+              <VField label="Double rooms" type="number" value={voucherForm.roomsDouble} onChange={(v) => handleVoucherFormField('roomsDouble', v)} />
+              <VField label="Triple rooms" type="number" value={voucherForm.roomsTriple} onChange={(v) => handleVoucherFormField('roomsTriple', v)} />
+
+              <VField label="Activity" value={voucherForm.activity} onChange={(v) => handleVoucherFormField('activity', v)} span={2} />
+              <VField label="Transfer" value={voucherForm.transfer} onChange={(v) => handleVoucherFormField('transfer', v)} span={2} />
+              <VField label="Charges" value={voucherForm.charges} onChange={(v) => handleVoucherFormField('charges', v)} span={2} />
+            </div>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-ink-400">Special Instructions</span>
+              <textarea
+                value={voucherForm.specialInstructions}
+                onChange={(e) => handleVoucherFormField('specialInstructions', e.target.value)}
+                rows={3}
+                className="rounded-xl border border-sage-200 px-3 py-2 text-sm outline-none focus:border-forest-600 resize-y"
+              />
+            </label>
+
+            <p className="text-xs text-ink-400">Issued by: {profile?.full_name ?? 'you'} (recorded automatically)</p>
+
+            <div className="flex gap-2 self-end">
+              <button onClick={() => setGeneratingVoucherType(null)} className="text-sm px-4 py-2 text-ink-600">
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerateVoucher}
+                disabled={savingVoucher}
+                className="rounded-full bg-forest-600 text-white text-sm px-4 py-2 disabled:opacity-50"
+              >
+                {savingVoucher ? 'Generating…' : 'Generate PDF'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {(file.client_file_vouchers ?? []).length === 0 ? (
-          <p className="text-ink-400 text-sm">No vouchers uploaded yet.</p>
+          <p className="text-ink-400 text-sm">No vouchers yet.</p>
         ) : (
           <div className="flex flex-col gap-1.5">
             {file.client_file_vouchers.map((v) => (
               <div key={v.id} className="flex items-center justify-between text-sm border border-sage-100 rounded-lg px-3 py-2">
-                <button onClick={() => handleViewPayment(v.file_path)} className="text-forest-700 hover:underline text-left flex items-center gap-2">
+                <button
+                  onClick={() => (v.pdf_url ? window.open(v.pdf_url, '_blank') : handleViewPayment(v.file_path))}
+                  className="text-forest-700 hover:underline text-left flex items-center gap-2"
+                >
                   {v.voucher_name}
                   <span className="text-[10px] uppercase tracking-wide text-ink-400 bg-sage-100 rounded-full px-2 py-0.5">
                     {v.voucher_type}
                   </span>
+                  {v.pdf_url && (
+                    <span className="text-[10px] uppercase tracking-wide text-forest-700 bg-forest-100 rounded-full px-2 py-0.5">
+                      generated
+                    </span>
+                  )}
                 </button>
-                <button onClick={() => handleDeleteVoucher(v.id)} className="text-ink-400 hover:text-danger-600">
-                  <IconTrash size={14} />
-                </button>
+                <div className="flex items-center gap-3">
+                  {v.issued_by_name && <span className="text-xs text-ink-400">by {v.issued_by_name}</span>}
+                  <button onClick={() => handleDeleteVoucher(v.id)} className="text-ink-400 hover:text-danger-600">
+                    <IconTrash size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -799,6 +938,20 @@ export default function ClientFileBuilder() {
         </button>
       </section>
     </div>
+  )
+}
+
+function VField({ label, value, onChange, type = 'text', span = 1 }) {
+  return (
+    <label className={`flex flex-col gap-1 ${span === 2 ? 'col-span-2' : ''}`}>
+      <span className="text-xs text-ink-400">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-lg border border-sage-200 px-3 py-1.5 text-sm outline-none focus:border-forest-600"
+      />
+    </label>
   )
 }
 
