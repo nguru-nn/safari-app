@@ -227,7 +227,13 @@ export default function ClientFileBuilder() {
   async function handleCreateInvoice(template) {
     setError('')
     try {
-      await createInvoice(id, { template, currency: 'USD', lineItems: [{ description: '', quantity: 1, unitPrice: 0 }], totalAmount: 0 })
+      await createInvoice(id, {
+        template,
+        currency: 'USD',
+        lineItems: [{ description: '', quantity: 1, unitPrice: 0 }],
+        totalAmount: 0,
+        billToName: file.client_name,
+      })
       await refresh()
     } catch (err) {
       setError(err.message)
@@ -242,10 +248,23 @@ export default function ClientFileBuilder() {
     }))
   }
 
+  function handleBillToField(field, value) {
+    setFile((f) => ({
+      ...f,
+      proforma_invoices: f.proforma_invoices.map((inv) => (inv.id === invoice.id ? { ...inv, [field]: value } : inv)),
+    }))
+  }
+
   async function handleSaveInvoice() {
     setError('')
     try {
-      await updateInvoice(invoice.id, { line_items: invoice.line_items, total_amount: invoice.total_amount })
+      await updateInvoice(invoice.id, {
+        line_items: invoice.line_items,
+        total_amount: invoice.total_amount,
+        bill_to_name: invoice.bill_to_name,
+        bill_to_phone: invoice.bill_to_phone,
+        bill_to_email: invoice.bill_to_email,
+      })
     } catch (err) {
       setError(err.message)
     }
@@ -509,6 +528,36 @@ export default function ClientFileBuilder() {
             <div className="flex items-center justify-between text-sm">
               <span className="font-mono text-ink-600">{invoice.invoice_number}</span>
               <span className="text-ink-400">{TEMPLATES.find((t) => t.value === invoice.template)?.label}</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-ink-400">Name</span>
+                <input
+                  type="text"
+                  value={invoice.bill_to_name ?? ''}
+                  onChange={(e) => handleBillToField('bill_to_name', e.target.value)}
+                  className="rounded-lg border border-sage-200 px-3 py-1.5 text-sm outline-none focus:border-forest-600"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-ink-400">Phone</span>
+                <input
+                  type="text"
+                  value={invoice.bill_to_phone ?? ''}
+                  onChange={(e) => handleBillToField('bill_to_phone', e.target.value)}
+                  className="rounded-lg border border-sage-200 px-3 py-1.5 text-sm outline-none focus:border-forest-600"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-ink-400">Email Address</span>
+                <input
+                  type="email"
+                  value={invoice.bill_to_email ?? ''}
+                  onChange={(e) => handleBillToField('bill_to_email', e.target.value)}
+                  className="rounded-lg border border-sage-200 px-3 py-1.5 text-sm outline-none focus:border-forest-600"
+                />
+              </label>
             </div>
 
             <div className="flex flex-col gap-2">
