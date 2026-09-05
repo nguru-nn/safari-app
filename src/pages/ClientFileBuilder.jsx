@@ -260,12 +260,49 @@ export default function ClientFileBuilder() {
       // The PDF is rendered server-side from the DB row, so save any pending line-item
       // edits first — otherwise the download could reflect stale numbers.
       await handleSaveInvoice()
-      const signedUrl = await generateInvoicePdf(invoice.id)
-      window.open(signedUrl, '_blank')
+      const url = await generateInvoicePdf(invoice.id)
+      // Update local state so the "View PDF" link renders immediately — window.open
+      // after an await is frequently blocked by popup blockers, so a real clickable
+      // link is the reliable path rather than depending on the popup succeeding.
+      setFile((f) => ({
+        ...f,
+        proforma_invoices: f.proforma_invoices.map((inv) => (inv.id === invoice.id ? { ...inv, pdf_url: url } : inv)),
+      }))
+      window.open(url, '_blank') // best-effort; the link below is the reliable fallback
     } catch (err) {
       setError(err.message)
     } finally {
       setGeneratingPdf(false)
+    }
+  }
+
+  // ---- PDF download (fetches the already-generated file, forces a real save) ----
+
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
+
+  // A plain <a download> is ignored by browsers for cross-origin URLs (this file
+  // lives on trips.africanroutesafaris.com, not the portal's own origin), so pulling
+  // it as a blob first is the only reliable way to trigger an actual file save here.
+  async function handleDownloadPdf() {
+    if (!invoice?.pdf_url) return
+    setDownloadingPdf(true)
+    setError('')
+    try {
+      const res = await fetch(invoice.pdf_url)
+      if (!res.ok) throw new Error('Could not fetch the PDF file')
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = `${invoice.invoice_number || 'invoice'}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDownloadingPdf(false)
     }
   }
 
@@ -531,7 +568,7 @@ export default function ClientFileBuilder() {
               <span className="font-semibold">{invoice.currency} {Number(invoice.total_amount ?? 0).toFixed(2)}</span>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={handleSaveInvoice} className="rounded-full bg-forest-600 text-white text-sm px-4 py-2">
                 Save invoice
               </button>
@@ -541,8 +578,28 @@ export default function ClientFileBuilder() {
                 className="rounded-full bg-sage-100 text-sm px-4 py-2 flex items-center gap-1.5 disabled:opacity-50"
               >
                 {generatingPdf ? <IconLoader2 size={14} className="animate-spin" /> : <IconDownload size={14} />}
-                {generatingPdf ? 'Generating…' : 'Download PDF'}
+                {generatingPdf ? 'Generating…' : invoice.pdf_url ? 'Regenerate PDF' : 'Generate PDF'}
               </button>
+              {invoice.pdf_url && (
+                <>
+                  <button
+                    onClick={handleDownloadPdf}
+                    disabled={downloadingPdf}
+                    className="rounded-full bg-forest-600 text-white text-sm px-4 py-2 flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {downloadingPdf ? <IconLoader2 size={14} className="animate-spin" /> : <IconDownload size={14} />}
+                    {downloadingPdf ? 'Downloading…' : 'Download'}
+                  </button>
+                  <a
+                    href={invoice.pdf_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-full text-sm px-4 py-2 text-forest-700 underline underline-offset-2"
+                  >
+                    View PDF ↗
+                  </a>
+                </>
+              )}
             </div>
           </div>
         )}
