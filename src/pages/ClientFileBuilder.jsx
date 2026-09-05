@@ -15,6 +15,7 @@ import {
   deleteVoucher,
   generateVoucher,
   saveVoucherDraft,
+  updateVoucherDraft,
   createInvoice,
   updateInvoice,
   generateInvoicePdf,
@@ -252,10 +253,20 @@ export default function ClientFileBuilder() {
   const [generatingVoucherType, setGeneratingVoucherType] = useState(null) // 'booking' | 'cancellation' | null
   const [voucherForm, setVoucherForm] = useState(emptyVoucherForm)
   const [savingVoucher, setSavingVoucher] = useState(false)
+  const [editingVoucherId, setEditingVoucherId] = useState(null) // null = creating new, set = editing/regenerating existing
 
   function openVoucherGenerator(voucherType) {
     setVoucherForm(emptyVoucherForm)
+    setEditingVoucherId(null)
     setGeneratingVoucherType(voucherType)
+  }
+
+  // Loads an existing voucher's saved fields back into the form so it can be edited
+  // and regenerated in place, instead of always creating a new entry.
+  function openVoucherEditor(voucher) {
+    setVoucherForm({ ...emptyVoucherForm, ...(voucher.form_data ?? {}) })
+    setEditingVoucherId(voucher.id)
+    setGeneratingVoucherType(voucher.voucher_type)
   }
 
   function handleVoucherFormField(field, value) {
@@ -269,8 +280,11 @@ export default function ClientFileBuilder() {
       // Client name and "issued by" are deliberately not part of the submitted form —
       // client name comes from this client file, and issued-by is derived server-side
       // from the caller's own auth token, so neither can be edited or spoofed here.
-      await generateVoucher(id, generatingVoucherType, voucherForm)
+      // Passing editingVoucherId regenerates that voucher in place (same number, same
+      // file overwritten) instead of creating a duplicate entry.
+      await generateVoucher(id, generatingVoucherType, voucherForm, editingVoucherId)
       setGeneratingVoucherType(null)
+      setEditingVoucherId(null)
       await refresh()
     } catch (err) {
       setError(err.message)
@@ -282,13 +296,19 @@ export default function ClientFileBuilder() {
   const [savingVoucherDraft, setSavingVoucherDraft] = useState(false)
 
   // Saves entered fields without generating a PDF — useful when not all details are
-  // ready yet. The PDF can be generated later from the same information.
+  // ready yet. The PDF can be generated later from the same information. Updates the
+  // existing draft in place if editing one, otherwise creates a new draft.
   async function handleSaveVoucherDraft() {
     setSavingVoucherDraft(true)
     setError('')
     try {
-      await saveVoucherDraft(id, generatingVoucherType, voucherForm, profile?.full_name)
+      if (editingVoucherId) {
+        await updateVoucherDraft(editingVoucherId, voucherForm, profile?.full_name)
+      } else {
+        await saveVoucherDraft(id, generatingVoucherType, voucherForm, profile?.full_name)
+      }
       setGeneratingVoucherType(null)
+      setEditingVoucherId(null)
       await refresh()
     } catch (err) {
       setError(err.message)
@@ -849,7 +869,7 @@ export default function ClientFileBuilder() {
           <div className="border-2 border-forest-600 rounded-xl p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-ink-900">
-                Generate {generatingVoucherType === 'booking' ? 'booking' : 'cancellation'} voucher
+                {editingVoucherId ? 'Edit' : 'Generate'} {generatingVoucherType === 'booking' ? 'booking' : 'cancellation'} voucher
               </p>
               <span className="text-xs text-ink-400">Client: {file.client_name}</span>
             </div>
@@ -894,7 +914,13 @@ export default function ClientFileBuilder() {
             <p className="text-xs text-ink-400">Issued by: {profile?.full_name ?? 'you'} (recorded automatically)</p>
 
             <div className="flex gap-2 self-end">
-              <button onClick={() => setGeneratingVoucherType(null)} className="text-sm px-4 py-2 text-ink-600">
+              <button
+                onClick={() => {
+                  setGeneratingVoucherType(null)
+                  setEditingVoucherId(null)
+                }}
+                className="text-sm px-4 py-2 text-ink-600"
+              >
                 Cancel
               </button>
               <button
@@ -909,7 +935,7 @@ export default function ClientFileBuilder() {
                 disabled={savingVoucher}
                 className="rounded-full bg-forest-600 text-white text-sm px-4 py-2 disabled:opacity-50"
               >
-                {savingVoucher ? 'Generating…' : 'Generate PDF'}
+                {savingVoucher ? 'Generating…' : editingVoucherId ? 'Regenerate PDF' : 'Generate PDF'}
               </button>
             </div>
           </div>
@@ -925,7 +951,7 @@ export default function ClientFileBuilder() {
                 <div key={v.id} className="flex items-center justify-between text-sm border border-sage-100 rounded-lg px-3 py-2">
                   <button
                     onClick={() => {
-                      if (v.pdf_url) window.open(v.pdf_url, '_blank')
+                      if (v.pdf_url) window.open(`${v.pdf_url}?v=${encodeURIComponent(v.updated_at)}`, '_blank')
                       else if (v.file_path) handleViewPayment(v.file_path)
                     }}
                     disabled={isDraft}
@@ -948,6 +974,11 @@ export default function ClientFileBuilder() {
                   </button>
                   <div className="flex items-center gap-3">
                     {v.issued_by_name && <span className="text-xs text-ink-400">by {v.issued_by_name}</span>}
+                    {v.form_data && (
+                      <button onClick={() => openVoucherEditor(v)} className="text-xs text-forest-700 hover:underline">
+                        {v.pdf_url ? 'Edit / Regenerate' : 'Edit'}
+                      </button>
+                    )}
                     <button onClick={() => handleDeleteVoucher(v.id)} className="text-ink-400 hover:text-danger-600">
                       <IconTrash size={14} />
                     </button>
