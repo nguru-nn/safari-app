@@ -14,6 +14,7 @@ import {
   addVoucher,
   deleteVoucher,
   generateVoucher,
+  saveVoucherDraft,
   createInvoice,
   updateInvoice,
   generateInvoicePdf,
@@ -275,6 +276,24 @@ export default function ClientFileBuilder() {
       setError(err.message)
     } finally {
       setSavingVoucher(false)
+    }
+  }
+
+  const [savingVoucherDraft, setSavingVoucherDraft] = useState(false)
+
+  // Saves entered fields without generating a PDF — useful when not all details are
+  // ready yet. The PDF can be generated later from the same information.
+  async function handleSaveVoucherDraft() {
+    setSavingVoucherDraft(true)
+    setError('')
+    try {
+      await saveVoucherDraft(id, generatingVoucherType, voucherForm, profile?.full_name)
+      setGeneratingVoucherType(null)
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingVoucherDraft(false)
     }
   }
 
@@ -879,6 +898,13 @@ export default function ClientFileBuilder() {
                 Cancel
               </button>
               <button
+                onClick={handleSaveVoucherDraft}
+                disabled={savingVoucherDraft}
+                className="rounded-full bg-sage-100 text-sm px-4 py-2 disabled:opacity-50"
+              >
+                {savingVoucherDraft ? 'Saving…' : 'Save'}
+              </button>
+              <button
                 onClick={handleGenerateVoucher}
                 disabled={savingVoucher}
                 className="rounded-full bg-forest-600 text-white text-sm px-4 py-2 disabled:opacity-50"
@@ -893,30 +919,42 @@ export default function ClientFileBuilder() {
           <p className="text-ink-400 text-sm">No vouchers yet.</p>
         ) : (
           <div className="flex flex-col gap-1.5">
-            {file.client_file_vouchers.map((v) => (
-              <div key={v.id} className="flex items-center justify-between text-sm border border-sage-100 rounded-lg px-3 py-2">
-                <button
-                  onClick={() => (v.pdf_url ? window.open(v.pdf_url, '_blank') : handleViewPayment(v.file_path))}
-                  className="text-forest-700 hover:underline text-left flex items-center gap-2"
-                >
-                  {v.voucher_name}
-                  <span className="text-[10px] uppercase tracking-wide text-ink-400 bg-sage-100 rounded-full px-2 py-0.5">
-                    {v.voucher_type}
-                  </span>
-                  {v.pdf_url && (
-                    <span className="text-[10px] uppercase tracking-wide text-forest-700 bg-forest-100 rounded-full px-2 py-0.5">
-                      generated
+            {file.client_file_vouchers.map((v) => {
+              const isDraft = !v.pdf_url && !v.file_path
+              return (
+                <div key={v.id} className="flex items-center justify-between text-sm border border-sage-100 rounded-lg px-3 py-2">
+                  <button
+                    onClick={() => {
+                      if (v.pdf_url) window.open(v.pdf_url, '_blank')
+                      else if (v.file_path) handleViewPayment(v.file_path)
+                    }}
+                    disabled={isDraft}
+                    className={`text-left flex items-center gap-2 ${isDraft ? 'text-ink-500 cursor-default' : 'text-forest-700 hover:underline'}`}
+                  >
+                    {v.voucher_name}
+                    <span className="text-[10px] uppercase tracking-wide text-ink-400 bg-sage-100 rounded-full px-2 py-0.5">
+                      {v.voucher_type}
                     </span>
-                  )}
-                </button>
-                <div className="flex items-center gap-3">
-                  {v.issued_by_name && <span className="text-xs text-ink-400">by {v.issued_by_name}</span>}
-                  <button onClick={() => handleDeleteVoucher(v.id)} className="text-ink-400 hover:text-danger-600">
-                    <IconTrash size={14} />
+                    {v.pdf_url && (
+                      <span className="text-[10px] uppercase tracking-wide text-forest-700 bg-forest-100 rounded-full px-2 py-0.5">
+                        generated
+                      </span>
+                    )}
+                    {isDraft && (
+                      <span className="text-[10px] uppercase tracking-wide text-amber-700 bg-amber-100 rounded-full px-2 py-0.5">
+                        draft
+                      </span>
+                    )}
                   </button>
+                  <div className="flex items-center gap-3">
+                    {v.issued_by_name && <span className="text-xs text-ink-400">by {v.issued_by_name}</span>}
+                    <button onClick={() => handleDeleteVoucher(v.id)} className="text-ink-400 hover:text-danger-600">
+                      <IconTrash size={14} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>
