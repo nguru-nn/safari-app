@@ -64,7 +64,7 @@ export async function getClientFile(id) {
       *,
       client_file_transfers ( id, type, transfer_time, flight_details, airport, room_number, sort_order ),
       client_file_payments ( id, payment_name, doc_type, amount, currency, payment_date, file_path, uploaded_at ),
-      client_file_vouchers ( id, voucher_name, voucher_type, file_path, uploaded_at ),
+      client_file_vouchers ( id, voucher_name, voucher_type, voucher_number, file_path, pdf_url, form_data, issued_by_name, uploaded_at ),
       proforma_invoices ( id, invoice_number, template, currency, line_items, total_amount, issued_date, pdf_url, bill_to_name, bill_to_phone, bill_to_email, updated_at )
     `)
     .eq('id', id)
@@ -219,6 +219,17 @@ export async function addVoucher(clientFileId, { voucherName, voucherType, fileP
 export async function deleteVoucher(id) {
   const { error } = await supabase.from('client_file_vouchers').delete().eq('id', id)
   if (error) throw error
+}
+
+// Directly invoked, like generateInvoicePdf — a user action, not a status-change side
+// effect. The Edge Function derives "issued by" from the caller's own auth token
+// (never from formData), so it can't be spoofed and always reflects who generated it.
+export async function generateVoucher(clientFileId, voucherType, formData) {
+  const { data, error } = await supabase.functions.invoke('generate-voucher-pdf', {
+    body: { clientFileId, voucherType, formData },
+  })
+  if (error) throw error
+  return data // { id, url, voucherNumber }
 }
 
 // ---- Proforma invoices ----
