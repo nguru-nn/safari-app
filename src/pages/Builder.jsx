@@ -12,6 +12,7 @@ import {
   trackEdit,
 } from '../lib/itineraries'
 import { uploadImage } from '../lib/storage'
+import HeroPickerModal from '../components/HeroPickerModal'
 import { useAuth } from '../contexts/AuthContext'
 import DayAccordionItem from '../components/DayAccordionItem'
 import InclusionsExclusions from '../components/InclusionsExclusions'
@@ -35,6 +36,7 @@ export default function Builder() {
   const [openDayId, setOpenDayId] = useState(null)
   const [error, setError] = useState('')
   const [uploadingHero, setUploadingHero] = useState(false)
+  const [showHeroPicker, setShowHeroPicker] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -80,6 +82,17 @@ export default function Builder() {
       setError(err.message)
     } finally {
       setUploadingHero(false)
+    }
+  }
+
+  async function handleHeroSelected(url) {
+    setShowHeroPicker(false)
+    try {
+      await updateItinerary(id, { hero_image_url: url })
+      if (profile?.id) trackEdit(id, profile.id).catch(() => {})
+      refresh()
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -191,11 +204,20 @@ export default function Builder() {
               <img src={itinerary.hero_image_url} alt="" className="w-full h-full object-cover" />
             </div>
           ) : null}
-          <label className="mt-2 inline-flex items-center gap-1.5 text-xs text-forest-600 font-medium cursor-pointer">
-            <IconPhoto size={14} />
-            {uploadingHero ? 'Uploading…' : itinerary.hero_image_url ? 'Replace image' : 'Upload hero image'}
-            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} disabled={uploadingHero} />
-          </label>
+          <div className="mt-2 flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setShowHeroPicker(true)}
+              className="inline-flex items-center gap-1.5 text-xs text-forest-600 font-medium"
+            >
+              <IconPhoto size={14} />
+              {itinerary.hero_image_url ? 'Change image' : 'Choose hero image'}
+            </button>
+            <label className="inline-flex items-center gap-1.5 text-xs text-ink-600 font-medium cursor-pointer">
+              {uploadingHero ? 'Uploading…' : 'Upload new'}
+              <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} disabled={uploadingHero} />
+            </label>
+          </div>
         </div>
       </div>
 
@@ -227,6 +249,14 @@ export default function Builder() {
 
       {/* Pricing */}
       <PricingSection itineraryId={id} pricing={pricing} onChanged={refresh} />
+      {showHeroPicker && (
+        <HeroPickerModal
+          currentUrl={itinerary.hero_image_url}
+          onClose={() => setShowHeroPicker(false)}
+          onSelect={handleHeroSelected}
+        />
+      )}
+
     </div>
   )
 }
