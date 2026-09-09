@@ -24,6 +24,7 @@ import TranslateDropdown from '../components/TranslateDropdown'
 import DuplicateModal from '../components/DuplicateModal'
 import InclusionsExclusions from '../components/InclusionsExclusions'
 import PricingSection from '../components/PricingSection'
+import HeroPickerModal from '../components/HeroPickerModal'
 
 export default function Review() {
   const { id } = useParams()
@@ -47,6 +48,7 @@ export default function Review() {
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [uploadingHero, setUploadingHero] = useState(false)
+  const [showHeroPicker, setShowHeroPicker] = useState(false)
 
   async function saveField(field, value) {
     try {
@@ -69,6 +71,16 @@ export default function Review() {
       setError(err.message)
     } finally {
       setUploadingHero(false)
+    }
+  }
+
+  async function handleHeroSelected(url) {
+    setShowHeroPicker(false)
+    try {
+      await updateItinerary(id, { hero_image_url: url })
+      await refresh()
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -216,10 +228,19 @@ export default function Review() {
           ) : (
             <div className="w-full h-full flex items-center justify-center text-ink-400 text-sm">No hero image</div>
           )}
-          <label className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 text-xs font-medium text-forest-600 cursor-pointer hover:bg-white shadow">
-            <IconCamera size={14} /> {uploadingHero ? 'Uploading…' : 'Change hero'}
-            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} disabled={uploadingHero} />
-          </label>
+          <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowHeroPicker(true)}
+              className="flex items-center gap-1.5 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 text-xs font-medium text-forest-600 hover:bg-white shadow"
+            >
+              <IconCamera size={14} /> Change hero
+            </button>
+            <label className="flex items-center gap-1.5 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 text-xs font-medium text-ink-600 cursor-pointer hover:bg-white shadow">
+              {uploadingHero ? 'Uploading…' : 'Upload new'}
+              <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} disabled={uploadingHero} />
+            </label>
+          </div>
         </div>
 
         <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -531,6 +552,14 @@ export default function Review() {
           </div>
         </div>
       )}
+      {showHeroPicker && (
+        <HeroPickerModal
+          currentUrl={itinerary.hero_image_url}
+          onClose={() => setShowHeroPicker(false)}
+          onSelect={handleHeroSelected}
+        />
+      )}
+
     </div>
   )
 }
