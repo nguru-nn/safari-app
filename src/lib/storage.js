@@ -54,6 +54,28 @@ export async function uploadImage(bucket, file) {
   return data.publicUrl
 }
 
+// Lists images already in a public bucket, newest first, so the editor can offer
+// a previously-uploaded image instead of forcing a fresh upload every time.
+// Objects are stored flat (uploadImage writes `${uuid}.${ext}` at the bucket root),
+// so a single un-prefixed list call covers everything.
+export async function listBucketImages(bucket, limit = 200) {
+  const { data, error } = await supabase.storage.from(bucket).list('', {
+    limit,
+    sortBy: { column: 'created_at', order: 'desc' },
+  })
+  if (error) throw error
+
+  return (data ?? [])
+    // Supabase inserts a hidden placeholder row to keep empty folders around, and
+    // `id` is null for folder entries — neither is a real image.
+    .filter((o) => o.id && o.name !== '.emptyFolderPlaceholder')
+    .map((o) => ({
+      name: o.name,
+      createdAt: o.created_at,
+      url: supabase.storage.from(bucket).getPublicUrl(o.name).data.publicUrl,
+    }))
+}
+
 // ---- Private uploads (client receipts, bank proof-of-payment, invoice PDFs) ----
 // Unlike uploadImage, these buckets have no public access — a file is only reachable
 // via a short-lived signed URL, generated on demand, never stored. Used for anything
