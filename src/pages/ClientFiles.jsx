@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import { useNavigate } from 'react-router'
 import {
   IconPlus,
   IconFileText,
@@ -7,7 +7,6 @@ import {
   IconExternalLink,
   IconCheck,
   IconTrash,
-  IconLoader2,
 } from '@tabler/icons-react'
 import { listClientFiles, createClientFile, deleteClientFile } from '../lib/clientFiles'
 import ClientPickerModal from '../components/ClientPickerModal'
@@ -26,23 +25,24 @@ function formatDateRange(start, end) {
   return `${new Date(start).toLocaleDateString(undefined, opts)} – ${new Date(end).toLocaleDateString(undefined, opts)}`
 }
 
-// Shared trash control. Deleting cascades to transfers, payments, vouchers and
-// proforma invoices in the database, so the confirm has to say so.
-function DeleteButton({ file, onDelete, busy }) {
+// Matches the trips delete button on Dashboard.jsx: stopPropagation so the
+// click doesn't also trigger the row's navigate.
+function DeleteButton({ file, onDelete }) {
   return (
     <button
-      onClick={() => onDelete(file)}
-      disabled={busy}
-      title={`Delete the file for ${file.client_name}`}
-      aria-label={`Delete the client file for ${file.client_name}`}
-      className="w-8 h-8 rounded-full flex items-center justify-center text-ink-400 hover:text-danger-600 hover:bg-sage-100 disabled:opacity-40 disabled:hover:text-ink-400 shrink-0"
+      onClick={(e) => {
+        e.stopPropagation()
+        onDelete(file)
+      }}
+      title="Delete client file"
+      className="text-ink-400 hover:text-danger-600 p-1"
     >
-      {busy ? <IconLoader2 size={15} className="animate-spin" /> : <IconTrash size={15} />}
+      <IconTrash size={15} />
     </button>
   )
 }
 
-function PublishedSection({ files, onDelete, deletingId }) {
+function PublishedSection({ files, onDelete }) {
   const [copiedId, setCopiedId] = useState(null)
 
   const published = files.filter((f) => f.status === 'published' && f.published_html_url)
@@ -96,7 +96,7 @@ function PublishedSection({ files, onDelete, deletingId }) {
               >
                 {copiedId === `both-${file.id}` ? 'Copied!' : 'Copy link + code'}
               </button>
-              <DeleteButton file={file} onDelete={onDelete} busy={deletingId === file.id} />
+              <DeleteButton file={file} onDelete={onDelete} />
             </div>
           </div>
         ))}
@@ -111,7 +111,7 @@ export default function ClientFiles() {
   const [error, setError] = useState('')
   const [showPicker, setShowPicker] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [deletingId, setDeletingId] = useState(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     refresh()
@@ -164,15 +164,12 @@ export default function ClientFiles() {
     )
       return
 
-    setDeletingId(file.id)
     setError('')
     try {
       await deleteClientFile(file.id)
       await refresh()
     } catch (err) {
       setError(err.message)
-    } finally {
-      setDeletingId(null)
     }
   }
 
@@ -201,7 +198,7 @@ export default function ClientFiles() {
         />
       </div>
 
-      {files && <PublishedSection files={files} onDelete={handleDelete} deletingId={deletingId} />}
+      {files && <PublishedSection files={files} onDelete={handleDelete} />}
 
       {files === null ? (
         <p className="text-ink-600 text-sm">Loading…</p>
@@ -212,36 +209,33 @@ export default function ClientFiles() {
       ) : (
         <div className="bg-white rounded-[var(--radius-card)] overflow-hidden">
           {files.map((file) => (
-            // The row is a wrapper rather than the link itself: a button nested
-            // inside an <a> is invalid markup, and clicking it would navigate.
             <div
               key={file.id}
-              className="flex items-center border-b border-sage-100 last:border-b-0 hover:bg-sage-50 transition-colors"
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate(`/client-files/${file.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') navigate(`/client-files/${file.id}`)
+              }}
+              className="flex items-center justify-between gap-3 px-5 py-4 border-b border-sage-100 last:border-b-0 hover:bg-sage-50 transition-colors cursor-pointer"
             >
-              <Link
-                to={`/client-files/${file.id}`}
-                className="flex flex-1 min-w-0 items-center justify-between gap-3 pl-5 pr-3 py-4"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-sage-100 flex items-center justify-center text-ink-500 shrink-0">
-                    <IconFileText size={16} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-ink-900 truncate">{file.client_name}</p>
-                    <p className="text-ink-400 text-xs">{formatDateRange(file.start_date, file.end_date)}</p>
-                  </div>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-sage-100 flex items-center justify-center text-ink-500 shrink-0">
+                  <IconFileText size={16} />
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  {file.driver_name && (
-                    <span className="text-ink-400 text-xs hidden sm:inline">Driver: {file.driver_name}</span>
-                  )}
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[file.status] ?? STATUS_STYLES.draft}`}>
-                    {file.status}
-                  </span>
+                <div className="min-w-0">
+                  <p className="font-medium text-ink-900">{file.client_name}</p>
+                  <p className="text-ink-400 text-xs">{formatDateRange(file.start_date, file.end_date)}</p>
                 </div>
-              </Link>
-              <div className="pr-4">
-                <DeleteButton file={file} onDelete={handleDelete} busy={deletingId === file.id} />
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                {file.driver_name && (
+                  <span className="text-ink-400 text-xs hidden sm:inline">Driver: {file.driver_name}</span>
+                )}
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[file.status] ?? STATUS_STYLES.draft}`}>
+                  {file.status}
+                </span>
+                <DeleteButton file={file} onDelete={handleDelete} />
               </div>
             </div>
           ))}
