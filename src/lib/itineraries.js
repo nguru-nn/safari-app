@@ -623,3 +623,28 @@ export async function createTranslation(sourceItineraryId, language) {
 
   return translated
 }
+// Operators paste URLs in whatever form the browser gave them — "example-lodge.com",
+// "www.example-lodge.com", sometimes with stray whitespace. The hotels.website_url
+// check constraint only accepts http(s):// URLs, so normalize before insert/update
+// rather than letting Postgres reject the save with a constraint error.
+export function normalizeWebsiteUrl(raw) {
+  const s = String(raw ?? '').trim()
+  if (!s) return null
+
+  // Already has a scheme: accept http/https, reject anything else (mailto:, javascript:, ftp:).
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`
+
+  let url
+  try {
+    url = new URL(withScheme)
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+
+  // Needs at least one dot in the host, so a typo like "lodge" doesn't become
+  // a valid-looking "https://lodge".
+  if (!url.hostname.includes('.')) return null
+
+  return url.toString()
+}
