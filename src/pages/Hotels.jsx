@@ -1,6 +1,23 @@
 import { useEffect, useState, useRef } from 'react'
-import { IconPlus, IconTrash, IconUpload, IconPhoto, IconLoader2 } from '@tabler/icons-react'
-import { listHotels, createHotel, addHotelImage, deleteHotel, deleteHotelImage } from '../lib/itineraries'
+import {
+  IconPlus,
+  IconTrash,
+  IconUpload,
+  IconPhoto,
+  IconLoader2,
+  IconWorld,
+  IconCheck,
+  IconX,
+} from '@tabler/icons-react'
+import {
+  listHotels,
+  createHotel,
+  addHotelImage,
+  deleteHotel,
+  deleteHotelImage,
+  updateHotelWebsite,
+  normalizeWebsiteUrl,
+} from '../lib/itineraries'
 import { uploadImage } from '../lib/storage'
 
 export default function Hotels() {
@@ -8,8 +25,15 @@ export default function Hotels() {
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [newName, setNewName] = useState('')
+  const [newWebsite, setNewWebsite] = useState('')
   const [creating, setCreating] = useState(false)
   const [uploadProgress, setUploadProgress] = useState({}) // { [hotelId]: { done: number, total: number } }
+
+  // There's no separate hotel edit screen, so the website is edited inline on the
+  // card. Only one card is ever in edit mode at a time.
+  const [editingUrlId, setEditingUrlId] = useState(null)
+  const [urlDraft, setUrlDraft] = useState('')
+  const [savingUrl, setSavingUrl] = useState(false)
 
   useEffect(() => {
     refresh()
@@ -28,8 +52,9 @@ export default function Hotels() {
     setCreating(true)
     setError('')
     try {
-      await createHotel(newName.trim(), '')
+      await createHotel(newName.trim(), '', newWebsite)
       setNewName('')
+      setNewWebsite('')
       await refresh()
     } catch (err) {
       setError(err.message)
@@ -46,6 +71,31 @@ export default function Hotels() {
       await refresh()
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  function startEditUrl(hotel) {
+    setEditingUrlId(hotel.id)
+    setUrlDraft(hotel.website_url ?? '')
+  }
+
+  function cancelEditUrl() {
+    setEditingUrlId(null)
+    setUrlDraft('')
+  }
+
+  async function handleSaveUrl(hotelId) {
+    setSavingUrl(true)
+    setError('')
+    try {
+      await updateHotelWebsite(hotelId, urlDraft)
+      setEditingUrlId(null)
+      setUrlDraft('')
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingUrl(false)
     }
   }
 
@@ -94,13 +144,13 @@ export default function Hotels() {
 
       {error && <p className="text-danger-600 text-sm mb-4">{error}</p>}
 
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-wrap gap-3 mb-6">
         <input
           type="text"
           placeholder="Search hotels…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 rounded-full border border-sage-200 px-4 py-2.5 text-sm outline-none focus:border-forest-600"
+          className="flex-1 min-w-[200px] rounded-full border border-sage-200 px-4 py-2.5 text-sm outline-none focus:border-forest-600"
         />
         <input
           type="text"
@@ -109,6 +159,14 @@ export default function Hotels() {
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
           className="w-56 rounded-full border border-sage-200 px-4 py-2.5 text-sm outline-none focus:border-forest-600"
+        />
+        <input
+          type="text"
+          placeholder="Website (optional)"
+          value={newWebsite}
+          onChange={(e) => setNewWebsite(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+          className="w-48 rounded-full border border-sage-200 px-4 py-2.5 text-sm outline-none focus:border-forest-600"
         />
         <button
           onClick={handleCreate}
@@ -131,6 +189,7 @@ export default function Hotels() {
             const images = (hotel.hotel_images ?? []).sort((a, b) => a.sort_order - b.sort_order)
             const coverImage = images[0]
             const progress = uploadProgress[hotel.id]
+            const isEditingUrl = editingUrlId === hotel.id
 
             return (
               <div
@@ -174,6 +233,77 @@ export default function Hotels() {
                       {hotel.description.replace(/<[^>]*>/g, ' ').trim()}
                     </p>
                   )}
+
+                  {/* Website — shown as a link on published itinerary pages */}
+                  <div className="mb-3">
+                    {isEditingUrl ? (
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={urlDraft}
+                            onChange={(e) => setUrlDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveUrl(hotel.id)
+                              if (e.key === 'Escape') cancelEditUrl()
+                            }}
+                            placeholder="example-lodge.com"
+                            className="flex-1 min-w-0 rounded-md border border-sage-200 px-2 py-1 text-xs outline-none focus:border-forest-600"
+                          />
+                          <button
+                            onClick={() => handleSaveUrl(hotel.id)}
+                            disabled={savingUrl}
+                            className="text-forest-600 p-1 disabled:opacity-50"
+                            title="Save"
+                          >
+                            {savingUrl ? (
+                              <IconLoader2 size={14} className="animate-spin" />
+                            ) : (
+                              <IconCheck size={14} />
+                            )}
+                          </button>
+                          <button
+                            onClick={cancelEditUrl}
+                            className="text-ink-400 hover:text-ink-600 p-1"
+                            title="Cancel"
+                          >
+                            <IconX size={14} />
+                          </button>
+                        </div>
+                        {urlDraft.trim() && !normalizeWebsiteUrl(urlDraft) && (
+                          <p className="text-[10px] text-danger-600 mt-1">
+                            Not a valid web address — this will save as no website.
+                          </p>
+                        )}
+                      </div>
+                    ) : hotel.website_url ? (
+                      <div className="flex items-center gap-1.5">
+                        <IconWorld size={13} className="text-forest-600 shrink-0" />
+                        <a
+                          href={hotel.website_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-forest-600 truncate hover:underline"
+                        >
+                          {hotel.website_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                        </a>
+                        <button
+                          onClick={() => startEditUrl(hotel)}
+                          className="text-ink-400 hover:text-ink-600 text-[10px] shrink-0 ml-auto"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startEditUrl(hotel)}
+                        className="flex items-center gap-1.5 text-xs text-ink-400 hover:text-forest-600"
+                      >
+                        <IconWorld size={13} /> Add website
+                      </button>
+                    )}
+                  </div>
 
                   {/* Image thumbnails — lazy loaded */}
                   <div className="flex gap-1.5 flex-wrap">
