@@ -181,22 +181,63 @@ export async function setDayActivity(dayId, activity, checked) {
 
 // ---- Hotel library ----
 
+// Operators paste URLs in whatever form the browser gave them — "example-lodge.com",
+// "www.example-lodge.com", sometimes with stray whitespace. The hotels.website_url
+// check constraint only accepts http(s):// URLs, so normalize before insert/update
+// rather than letting Postgres reject the save with a constraint error.
+export function normalizeWebsiteUrl(raw) {
+  const s = String(raw ?? '').trim()
+  if (!s) return null
+
+  // Already has a scheme: accept http/https, reject anything else (mailto:, javascript:, ftp:).
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`
+
+  let url
+  try {
+    url = new URL(withScheme)
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+
+  // Needs at least one dot in the host, so a typo like "lodge" doesn't become
+  // a valid-looking "https://lodge".
+  if (!url.hostname.includes('.')) return null
+
+  return url.toString()
+}
+
 export async function listHotels(searchTerm = '') {
-  let query = supabase.from('hotels').select('id, name, description, hotel_images ( id, image_url, sort_order )')
+  let query = supabase
+    .from('hotels')
+    .select('id, name, description, website_url, hotel_images ( id, image_url, sort_order )')
   if (searchTerm) query = query.ilike('name', `%${searchTerm}%`)
   const { data, error } = await query.order('name')
   if (error) throw error
   return data
 }
 
-export async function createHotel(name, description) {
+// websiteUrl defaults to '' so existing two-argument callers (HotelPickerModal)
+// keep working unchanged.
+export async function createHotel(name, description, websiteUrl = '') {
   const { data, error } = await supabase
     .from('hotels')
-    .insert({ name, description })
+    .insert({ name, description, website_url: normalizeWebsiteUrl(websiteUrl) })
     .select()
     .single()
   if (error) throw error
   return data
+}
+
+// The hotel's own website, shown as a link under "Tonight's stay" on published pages.
+// It lives on the hotel record rather than the day, so updating it once fixes every
+// itinerary using that property on its next republish.
+export async function updateHotelWebsite(hotelId, websiteUrl) {
+  const { error } = await supabase
+    .from('hotels')
+    .update({ website_url: normalizeWebsiteUrl(websiteUrl) })
+    .eq('id', hotelId)
+  if (error) throw error
 }
 
 export async function addHotelImage(hotelId, imageUrl, sortOrder) {
@@ -622,29 +663,4 @@ export async function createTranslation(sourceItineraryId, language) {
   }
 
   return translated
-}
-// Operators paste URLs in whatever form the browser gave them — "example-lodge.com",
-// "www.example-lodge.com", sometimes with stray whitespace. The hotels.website_url
-// check constraint only accepts http(s):// URLs, so normalize before insert/update
-// rather than letting Postgres reject the save with a constraint error.
-export function normalizeWebsiteUrl(raw) {
-  const s = String(raw ?? '').trim()
-  if (!s) return null
-
-  // Already has a scheme: accept http/https, reject anything else (mailto:, javascript:, ftp:).
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`
-
-  let url
-  try {
-    url = new URL(withScheme)
-  } catch {
-    return null
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
-
-  // Needs at least one dot in the host, so a typo like "lodge" doesn't become
-  // a valid-looking "https://lodge".
-  if (!url.hostname.includes('.')) return null
-
-  return url.toString()
 }
